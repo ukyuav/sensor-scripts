@@ -18,7 +18,8 @@ i2c_bus:set_retries(10)
 gcs:send_text(7, "i2c_readSensors Script Started!")
 
 -- init addresses of active sensors (change to known values)
-sensor_addr = {0x28, 0x38, 0x48, 0x58, 0x68, 0x78}
+-- sensor_addr = {0x28, 0x38, 0x48, 0x58, 0x68, 0x78}
+sensor_addr = {0x28, 0x38, 0x48, 0x68}
 
 -- Function to write all data to file
 local function write_to_file()
@@ -48,7 +49,8 @@ local function write_to_dataflash()
   -- not all format types are supported by scripting only: i, L, e, f, n, M, B, I, E, and N
   -- Data MUST be integer|number|uint32_t_ud|string , type to match format string
   -- lua automatically adds a timestamp in micro seconds
-  logger:write('SENS','s1,s2,s3,s4,s5,s6','NNNNNN', log_data[1], log_data[2], log_data[3], log_data[4], log_data[5], log_data[6])
+  -- logger:write('SENS','s1,s2,s3,s4,s5,s6','NNNNNN', log_data[1], log_data[2], log_data[3], log_data[4], log_data[5], log_data[6])
+  logger:write('SENS','s1,s2,s3,s4','NNNN', log_data[1], log_data[2], log_data[3], log_data[4])
 end
 
 -- MAIN FUNCTION
@@ -76,7 +78,7 @@ function update()
     end
   end
   -- write data to file
-  write_to_file()
+  --write_to_file()
 
   -- write data to bin
   write_to_dataflash()
@@ -86,7 +88,7 @@ function update()
   return update, 200 -- reschedules the loop every 200ms (~5Hz sample)
 end
 
--- This section runs once 
+-- This section runs once
 
 -- open file to write to in "append" mode
 file = io.open(file_name, "a")
