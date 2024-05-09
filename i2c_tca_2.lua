@@ -9,8 +9,8 @@ This program uses the TCA Multiplexer to communicate to multiple devices with th
 Author: Ryan Prince | Last Updated By: Justin Tussey
 Last Updated: 07 May 2024
 
-]]
---
+]] --
+
 -- init i2c bus
 local log_data = {}
 local i2c_bus = i2c:get_device(0, 0)
@@ -22,10 +22,7 @@ local sensor_addr = 0x28
 
 -- var for list of which channels on the multiplexer are connected
 local channel_numbers = {
-  1,
-  2,
-  3,
-  4
+  7
 }
 
 -- for each TCA9548A, add an entry with its address
@@ -45,10 +42,10 @@ end
 
 -- MAIN FUNCTION
 function update()
-  for channel in channel_numbers do
+for key, value in pairs(channel_numbers) do
 
     -- select TCA module 1, and channel i
-    tcaselect(1, channel)
+    tcaselect(1, value)
 
     -- once open use the address of the sensor
     i2c_bus:set_address(sensor_addr)
@@ -61,15 +58,15 @@ function update()
     msg = (returnTable[1] << 8 | returnTable[2]) & 0x3FFF
 
     -- send_text(priority level (7 is Debug), text as a string formatted to hex)
-    gcs:send_text(7, "Data on " .. "Channel " .. string.format("%d", channel) .. "-> " .. string.format("%x", msg))
+    gcs:send_text(7, "Data on " .. "Channel " .. string.format("%d", value) .. "-> " .. string.format("%x", msg))
 
     -- normalize data to [-2 2] in inH2O and make the datatype string
     -- math is ((range*data)/max(data) - 2)
-    log_data[i] = tostring((4.0 * msg) / 0x3FFF - 2)
+    log_data[key] = tostring((4.0 * msg) / 0x3FFF - 2)
   end
 
   -- logger:write('SENS', 's1,s2,s3,s4,s5,s6', 'NNNNNN', log_data[1], log_data[2], log_data[3], log_data[4], log_data[5], log_data[6])
-  logger:write('SENS','s1,s2,s3,s4','NNNN', log_data[1], log_data[2], log_data[3], log_data[4])
+  logger:write('SENS','s1','N', log_data[1])
 
   i2c_bus:set_address(0x00)
   return update, 1000 -- reschedules the loop every 1000ms
