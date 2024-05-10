@@ -22,7 +22,8 @@ local sensor_addr = 0x28
 
 -- var for list of which channels on the multiplexer are connected
 local channel_numbers = {
-  7
+  7,
+  2
 }
 
 -- for each TCA9548A, add an entry with its address
@@ -66,7 +67,7 @@ for key, value in pairs(channel_numbers) do
   end
 
   -- logger:write('SENS', 's1,s2,s3,s4,s5,s6', 'NNNNNN', log_data[1], log_data[2], log_data[3], log_data[4], log_data[5], log_data[6])
-  logger:write('SENS','s1','N', log_data[1])
+  logger:write('SENS','s1,s2','NN', log_data[1], log_data[2])
 
   i2c_bus:set_address(0x00)
   return update, 1000 -- reschedules the loop every 1000ms
