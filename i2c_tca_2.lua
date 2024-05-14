@@ -2,7 +2,8 @@
 
 I2C TCA9548 interface
 
-This program uses the TCA Multiplexer to communicate to multiple devices with the same addresses
+This program uses the TCA Multiplexer to communicate to multiple devices with
+the same addresses
 
 Author: Ryan Prince | Last Updated By: Justin Tussey
 Last Updated: 14 May 2024
@@ -63,9 +64,10 @@ function update()
     -- read_registers(begin at register, number of bytes to read)
     returnTable = i2c_bus:read_registers(0, 2)
 
+    -- if there is no i2c device connected (or no data is read in general) log it as an error
     if (returnTable == nil) then
       gcs:send_text(0, "returnTable val nil," .. " disconn sensor," .. " channel: " .. string.format("%d", value))
-      log_data[key] = "0000" --writing string directly since it is unnecessary to use tostring() here
+      log_data[key] = "0" --writing string directly since it is unnecessary to use tostring() here
       error_list[key] = "ERROR"
     else
       -- output data to MP Messages
