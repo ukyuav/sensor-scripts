@@ -8,11 +8,6 @@ Author: Justin Tussey
 Last Updated: 2024-05-15
 ]] --
 
-
--- global variable to keep track of how many iterations of the loop occur
--- without receiving data
-local loops_without_data = 0
-
 -- initialize serial connection
 local BAUD_RATE = 9600
 
@@ -98,35 +93,25 @@ function log_data(message_string)
 --                    "hum:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
 --                    "temp3:" .. string.format(" %.2f \r\n", measurements_table[2])
 --   )
--- end
+end
 
 
 
 function update()
+  local n_bytes = PORT:available()
 
   -- If there is one or more loops that are unsuccessful, send an error message
   -- to Mission Planner and write all zeros to the log file
-  if loops_without_data > 0 then
-    gcs:send_text(0, "ERROR: PTH has failed to send data for ".. string.format("%d", loops_without_data) .. " loops")
-
+  if n_bytes <= 0 then
+    gcs:send_text(0, "ERROR: PTH has failed to send data")
     -- write zeros to BIN file to make it clear that the sensor is disconnected
     logger:write('SAMA', 'pres,temp1,temp2,hum,temp3', -- section name and labels
                'NNNNN',                              -- data type (char[16])
                'POO%O',                              -- units,(Pa, C, C, % (humidity), C)
                '-----',                              -- multipliers (- signifies no multiplier)
-               '0',                                  -- data for labels
-               '0',
-               '0',
-               '0',
-               '0')
+               '0', '0', '0', '0', '0') -- zeros for labels since the PTH is disconnected
   end
 
-  -- increment the number of unsuccessful loops. If the loop is unsuccessful
-  -- (n_bytes <= 0 so it does not enter the while loop), it will not be set to
-  -- zero and trigger the above if statement on the next loop
-  loops_without_data = loops_without_data + 1
-
-  local n_bytes = PORT:available()
   while n_bytes > 0 do
     -- only read a max of 515 bytes in a go
     -- this limits memory consumption
@@ -143,13 +128,9 @@ function update()
     else
       gcs:send_text(0, "ERROR: PTH Data failed checksum, check sensor!")
     end
-
-    -- set unsuccessful loop count to 0, since we completed a loop
-    loops_without_data = 0
   end
 
-
-  return update, 1000 -- reschedules the loop every 1000ms (temporary)
+  return update, 1000 -- reschedules the loop every 1000ms (1 second, max since sensor only sends 1 message every second)
 end
 
 return update() -- run immediately before starting to reschedule
