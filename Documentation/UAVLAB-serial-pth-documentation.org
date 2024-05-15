@@ -1,0 +1,39 @@
+#+title: UAVLAB Serial PTH (Samamet) Documentation
+#+date: <2024-05-15 Wed>
+#+author: Justin Tussey
+#+options: toc:2
+
+* Table of Contents :toc:
+- [[#code-overview][Code Overview]]
+  - [[#serial-initialization][Serial Initialization]]
+
+* Code Overview
+** Serial Initialization
+#+begin_src lua
+-- initialize serial connection
+local BAUD_RATE = 9600
+
+-- find the serial first (0) scripting serial port instance
+-- SERIALx_PROTOCOL 28
+local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port")
+
+-- begin the serial port
+PORT:begin(BAUD_RATE)
+PORT:set_flow_control(0)
+#+end_src
+
+This sets up the serial connection between the PTH and the flight controller.
+A baudrate of 9600 is used since this is the speed the sensor operates at.
+
+After we set the baudrate, we then find the serial port that is currently open
+and using protocol 28, which is the ArduPilot protocol for scripting.
+
+#+begin_quote
+NOTE: make sure to set the correct baudrate of 9600 and protocol 28 on the
+serial line being used to ensure the sensor is connected.
+#+end_quote
+
+If we cannot find a serial port with the scripting protocol, the script throws
+an error.
+
+The serial initialization is pulled from the ArduPilot[[https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Scripting/examples/Serial_Dump.lua][ Serial Dump example]].
