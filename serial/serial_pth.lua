@@ -81,7 +81,6 @@ function parse_data(message_string)
     return false
   end
 
-
   local data_table = {}
 
   -- take the string, match up until the first comma, place that substring
@@ -120,6 +119,12 @@ end
 -- take the input table, and check if it has 5 elements in it, then write that
 -- data to the BIN file, with the appropriate names and units
 function log_data(measurements_table)
+  -- care must be taken when selecting a name, must be less than four characters and not clash with an existing log type
+  -- format characters specify the type of variable to be logged, see AP_Logger/README.md
+  -- https://github.com/ArduPilot/ardupilot/tree/master/libraries/AP_Logger
+  -- not all format types are supported by scripting only: i, L, e, f, n, M, B, I, E, and N
+  -- Data MUST be integer|number|uint32_t_ud|string , type to match format string
+  -- lua automatically adds a timestamp in micro seconds
   if #measurements_table ~= 5 then
     return false
   end
@@ -173,12 +178,12 @@ function update()
       if  not (parse_data(data)) then
         log_error()
         gcs:send_text(0, "ERROR: PTH data was not successfully parsed or not written to BIN file correctly!")
-        gcs:send_text(0, "Incoming string: " .. data)
+        gcs:send_text(0, "Incoming string: " .. data .. string.format(" size: %d", #data))
       end
     else
       log_error()
       gcs:send_text(0, "ERROR: PTH Data failed checksum, check sensor!")
-      gcs:send_text(0, "Incoming string: " .. data)
+      gcs:send_text(0, "Incoming string: " .. data .. string.format(" size: %d", #data))
     end
   end
 
