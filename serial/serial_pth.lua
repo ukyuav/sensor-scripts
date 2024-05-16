@@ -5,7 +5,7 @@ Read the data from the serial line that the PTH is connected to, then decode the
 messages from it, and log the data to the autopilots BIN file.
 
 Author: Justin Tussey
-Last Updated: 2024-05-15
+Last Updated: 2024-05-16
 ]] --
 
 -- initialize serial connection
@@ -27,11 +27,23 @@ function verify_checksum(message_string)
   -- take the sub-string from (but not including) "$" and "*"
   local data_string = message_string:match("%$(.*)%*")
 
+  -- check that the regex successfully parsed the string
+  if data_string == nil then
+    return false
+  end
+
   -- extracts the the two characters after the '*' in the message string, and
   -- only accepts valid "2 character" hex numbers, ie: 4A. Then take that string,
   -- then convert it to an integer (16 specifies that our input string is a hex
   -- number)
-  local incoming_checksum = tonumber(message_string:match("%*([0-9A-F][0-9A-F])"), 16)
+  local incoming_checksum = message_string:match("%*([0-9A-F][0-9A-F])")
+
+  -- check that the regex successfully parsed the string
+  if incoming_checksum == nil then
+    return false
+  end
+
+  incoming_checksum = tonumber(incoming_checksum, 16)
 
   -- starting value of zeros, which will not effect the first XOR
   local checksum = 0x0
@@ -53,14 +65,23 @@ function verify_checksum(message_string)
   else
     return true
   end
+
 end
 
 -- Take the data from the verified message string and split up the string, using
 -- a comma as a delimiter. Then take the measurements from the data and log them
 -- to the BIN file.
-function log_data(message_string)
+function parse_data(message_string)
   -- take the sub-string from (but not including) "$" and "*"
   local data_string = message_string:match("%$(.*)%*")
+
+  -- check that the regex successfully parsed the string
+  -- (unlikely since we already checked but it doesn't hurt)
+  if data_string == nil then
+    return false
+  end
+
+
   local data_table = {}
 
   -- take the string, match up until the first comma, place that substring
@@ -71,11 +92,37 @@ function log_data(message_string)
     table.insert(data_table, str)
   end
 
+  -- make sure regex successfully splits by commas.
+  -- (hopefully will not reach here since the checksum should fail before then)
+  if #data_table ~= 12 then
+    return false
+  end
+
   local measurements_table={}
   for i=3,12,2 do
     table.insert(measurements_table, data_table[i])
   end
 
+  -- return whether data input data matched needed format (table with 5
+  -- elements)
+  return log_data(measurements_table)
+
+-- report data to Mission Planner, not necessary all the time
+--   gcs:send_text(7, "\r\npres:" .. string.format(" %.2f \r\n", measurements_table[1]) ..
+--                    "temp1:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
+--                    "temp2:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
+--                    "hum:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
+--                    "temp3:" .. string.format(" %.2f \r\n", measurements_table[2])
+--   )
+
+end
+
+-- take the input table, and check if it has 5 elements in it, then write that
+-- data to the BIN file, with the appropriate names and units
+function log_data(measurements_table)
+  if #measurements_table ~= 5 then
+    return false
+  end
   logger:write('SAMA', 'pres,temp1,temp2,hum,temp3', -- section name and labels
                'NNNNN',                              -- data type (char[16])
                'POO%O',                              -- units,(Pa, C, C, % (humidity), C)
@@ -85,16 +132,17 @@ function log_data(message_string)
                measurements_table[3],
                measurements_table[4],
                measurements_table[5])
-
--- report data to Mission Planner, not necessary all the time
---   gcs:send_text(7, "\r\npres:" .. string.format(" %.2f \r\n", measurements_table[1]) ..
---                    "temp1:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
---                    "temp2:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
---                    "hum:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
---                    "temp3:" .. string.format(" %.2f \r\n", measurements_table[2])
---   )
+  return true
 end
 
+-- called when an error is detected, and writes all zeros to the BIN file
+function log_error()
+    logger:write('SAMA', 'pres,temp1,temp2,hum,temp3', -- section name and labels
+                 'NNNNN',                              -- data type (char[16])
+                 'POO%O',                              -- units,(Pa, C, C, % (humidity), C)
+                 '-----',                              -- multipliers (- signifies no multiplier)
+                 '0', '0', '0', '0', '0') -- zeros for labels since there is an error with the PTH or its data
+end
 
 
 function update()
@@ -103,13 +151,9 @@ function update()
   -- If there is one or more loops that are unsuccessful, send an error message
   -- to Mission Planner and write all zeros to the log file
   if n_bytes <= 0 then
+    log_error()
     gcs:send_text(0, "ERROR: PTH has failed to send data")
     -- write zeros to BIN file to make it clear that the sensor is disconnected
-    logger:write('SAMA', 'pres,temp1,temp2,hum,temp3', -- section name and labels
-               'NNNNN',                              -- data type (char[16])
-               'POO%O',                              -- units,(Pa, C, C, % (humidity), C)
-               '-----',                              -- multipliers (- signifies no multiplier)
-               '0', '0', '0', '0', '0') -- zeros for labels since the PTH is disconnected
   end
 
   while n_bytes > 0 do
@@ -123,10 +167,18 @@ function update()
     end
 
     local data = string.char(table.unpack(buffer))
+    -- check if checksum is valid
     if (verify_checksum(data)) then
-      log_data(data)
+      -- make sure that data is logged correctly
+      if  not (parse_data(data)) then
+        log_error()
+        gcs:send_text(0, "ERROR: PTH data was not successfully parsed or not written to BIN file correctly!")
+        gcs:send_text(0, "Incoming string: " .. data)
+      end
     else
+      log_error()
       gcs:send_text(0, "ERROR: PTH Data failed checksum, check sensor!")
+      gcs:send_text(0, "Incoming string: " .. data)
     end
   end
 
