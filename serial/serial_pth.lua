@@ -158,24 +158,31 @@ function update()
   if n_bytes <= 0 then
     log_error()
     gcs:send_text(0, "ERROR: PTH has failed to send data")
-    -- write zeros to BIN file to make it clear that the sensor is disconnected
+  elseif n_bytes < 60 then -- check if message is the full 60 bytes we expect
+    log_error()
+    gcs:send_text(0, "ERROR: Full message from PTH not received")
+    gcs:send_text(0, "Message length: " .. tostring(n_bytes))
   end
 
   while n_bytes > 0 do
-    -- only read a max of 515 bytes in a go
+    if n_bytes >= 120 then
+      gcs:send_text(7, "Bytes available: " .. tostring(n_bytes))
+    end
+    -- only read a max of 120 bytes in a go
     -- this limits memory consumption
     local buffer = {} -- table to buffer data
-    local bytes_target = n_bytes - math.min(n_bytes, 512)
+    local bytes_target = n_bytes - math.min(n_bytes, 60)
     while n_bytes > bytes_target do
       table.insert(buffer,PORT:read())
       n_bytes = n_bytes - 1
     end
 
     local data = string.char(table.unpack(buffer))
+
     -- check if checksum is valid
     if (verify_checksum(data)) then
       -- make sure that data is logged correctly
-      if  not (parse_data(data)) then
+      if not (parse_data(data)) then
         log_error()
         gcs:send_text(0, "ERROR: PTH data was not successfully parsed or not written to BIN file correctly!")
         gcs:send_text(0, "Incoming string: " .. data .. string.format(" size: %d", #data))
@@ -187,7 +194,8 @@ function update()
     end
   end
 
-  return update, 1000 -- reschedules the loop every 1000ms (1 second, max since sensor only sends 1 message every second)
+  return update, 1000-- reschedules the loop every 1000ms (1 second, max since sensor only sends 1 message every second)
 end
+
 
 return update() -- run immediately before starting to reschedule
