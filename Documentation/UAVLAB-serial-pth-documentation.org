@@ -26,7 +26,7 @@ PTH serial sensor
 
 #+begin_quote
 *NOTE*: This document is in the order that the code is ran, not in the order
-that it is in the file.
+that it is organized in the file.
 #+end_quote
 
 ** Serial Initialization
@@ -160,8 +160,15 @@ the asterisk, is a two digit hexadecimal number, represented as a string. This
 is the checksum of the message.
 
 #+begin_example
-$UKPTH,000E,098152.5,Pa,23.17,C,22.90,C,42.21,%,22.45,C*4A
+$UKPTH,000E,098152.5,Pa,23.17,C,22.90,C,42.21,%,22.45,C*4A<CR><LF>
 #+end_example
+
+#+begin_comment
+*NOTE*: The end of the message has the standard DOS (Windows) line ending of a
+carriage return and a line feed, (shown as <CR> and <LF>). This makes the
+message overall 60 characters (bytes), despite there being only 58 visible
+characters.
+#+end_comment
 
 To calculate the checksum from the message, we take the "main body" of the
 message, that is the text inside, but *NOT INCLUDING* the "~$~" and "~*~". The main
