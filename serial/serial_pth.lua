@@ -5,8 +5,23 @@ Read the data from the serial line that the PTH is connected to, then decode the
 messages from it, and log the data to the autopilots BIN file.
 
 Author: Justin Tussey
-Last Updated: 2024-05-16
+Last Updated: 2024-05-20
 ]] --
+
+-- variable to count iterations without getting message
+local loops_since_data_received = 0
+
+-- variables to count number of bytes available on serial line
+local previous_n_bytes = 0
+local n_bytes = 0
+
+
+-- error type table
+local error_list = {
+  "No data received",      -- 1
+  "Checksum fail",         -- 2
+  "Data parsing fail",     -- 3
+}
 
 -- initialize serial connection
 local BAUD_RATE = 9600
@@ -33,7 +48,7 @@ function verify_checksum(message_string)
   end
 
   -- extracts the the two characters after the '*' in the message string, and
-  -- only accepts valid "2 character" hex numbers, ie: 4A. Then take that string,
+  -- only accepts valid "2 character" hex numbers, ie: 4A. Then take that string
   -- then convert it to an integer (16 specifies that our input string is a hex
   -- number)
   local incoming_checksum = message_string:match("%*([0-9A-F][0-9A-F])")
@@ -128,40 +143,52 @@ function log_data(measurements_table)
   if #measurements_table ~= 5 then
     return false
   end
-  logger:write('SAMA', 'pres,temp1,temp2,hum,temp3', -- section name and labels
-               'NNNNN',                              -- data type (char[16])
-               'POO%O',                              -- units,(Pa, C, C, % (humidity), C)
-               '-----',                              -- multipliers (- signifies no multiplier)
+  logger:write('SAMA', 'pres,temp1,temp2,hum,temp3,error', -- section name and labels
+               'NNNNNN',                              -- data type (char[16])
+               'POO%O-',                              -- units,(Pa, C, C, % (humidity), C)
+               '------',                              -- multipliers (- signifies no multiplier)
                measurements_table[1],                -- data for labels
                measurements_table[2],
                measurements_table[3],
                measurements_table[4],
-               measurements_table[5])
+               measurements_table[5],
+               "Normal")
   return true
 end
 
 -- called when an error is detected, and writes all zeros to the BIN file
-function log_error()
-    logger:write('SAMA', 'pres,temp1,temp2,hum,temp3', -- section name and labels
-                 'NNNNN',                              -- data type (char[16])
-                 'POO%O',                              -- units,(Pa, C, C, % (humidity), C)
-                 '-----',                              -- multipliers (- signifies no multiplier)
-                 '0', '0', '0', '0', '0') -- zeros for labels since there is an error with the PTH or its data
+function log_error(error_type)
+  logger:write('SAMA', 'pres,temp1,temp2,hum,temp3,error', -- section name and labels
+               'NNNNNN',                                   -- data type (char[16])
+               'POO%O-',                                   -- units,(Pa, C, C, % (humidity), C)
+               '------',                                   -- multipliers (- signifies no multiplier)
+               '0', '0', '0', '0', '0', error_type)        -- zeros for labels since there is an error with the PTH or its data
 end
 
 
 function update()
-  local n_bytes = PORT:available()
+  previous_n_bytes = n_bytes
+  n_bytes = PORT:available()
 
-  -- If there is one or more loops that are unsuccessful, send an error message
-  -- to Mission Planner and write all zeros to the log file
-  if n_bytes <= 0 then
-    log_error()
-    gcs:send_text(0, "ERROR: PTH has failed to send data")
-  elseif n_bytes < 60 then -- check if message is the full 60 bytes we expect
-    log_error()
-    gcs:send_text(0, "ERROR: Full message from PTH not received")
-    gcs:send_text(0, "Message length: " .. tostring(n_bytes))
+  -- If we have received no bytes or have not received any new bytes, increment
+  -- the count of loops without data. If it reaches 6 or more
+  -- (250ms * 6 = 1.5sec), then log an error.
+  if (n_bytes <= 0) or (n_bytes == previous_n_bytes) then
+    loops_since_data_received = loops_since_data_received + 1
+    if loops_since_data_received >= 6 then
+      log_error(error_list[1])
+      gcs:send_text(0, "ERROR: PTH has failed to send data")
+      gcs:send_text(0, "Bytes received: " .. tostring(n_bytes))
+    end
+      return update, 250
+  else
+    loops_since_data_received = 0
+  end
+
+  -- If we are in the middle of recieving a message,
+  -- simply wait for the rest of the message to arrive
+  while (n_bytes > 0 and n_bytes < 60)  do
+    return update, 250
   end
 
   while n_bytes > 0 do
@@ -183,18 +210,18 @@ function update()
     if (verify_checksum(data)) then
       -- make sure that data is logged correctly
       if not (parse_data(data)) then
-        log_error()
+        log_error(error_list[3])
         gcs:send_text(0, "ERROR: PTH data was not successfully parsed or not written to BIN file correctly!")
         gcs:send_text(0, "Incoming string: " .. data .. string.format(" size: %d", #data))
       end
     else
-      log_error()
+      log_error(error_list[2])
       gcs:send_text(0, "ERROR: PTH Data failed checksum, check sensor!")
       gcs:send_text(0, "Incoming string: " .. data .. string.format(" size: %d", #data))
     end
   end
 
-  return update, 1000-- reschedules the loop every 1000ms (1 second, max since sensor only sends 1 message every second)
+  return update, 250 -- reschedules the loop every 250ms
 end
 
 
