@@ -26,8 +26,9 @@ local sensor_addr = 0x28
 
 -- var for list of which channels on the multiplexer are connected
 local channel_numbers = {
-  7,
-  2,
+  0,
+  1,
+  2
 }
 
 -- for each TCA9548A, add an entry with its address
@@ -64,8 +65,7 @@ function log_data()
   -- not all format types are supported by scripting only: i, L, e, f, n, M, B, I, E, and N
   -- Data MUST be integer|number|uint32_t_ud|string , type to match format string
   -- lua automatically adds a timestamp in micro seconds
-  -- logger:write('SENS', 's1,s2,s3,s4,s5,s6', 'NNNNNN', log_data[1], log_data[2], log_data[3], log_data[4], log_data[5], log_data[6])
-  logger:write('SENS','s1,s2,err1,err2','NNNN', log_data_list[1], log_data_list[2], error_list[1], error_list[2])
+  logger:write('SENS','s1,s2,s3,err1,err2,err3','NNNNNN', log_data_list[1], log_data_list[2], log_data_list[3], error_list[1], error_list[2], error_list[3])
 end
 
 function log_channel_error(channel_index)
@@ -84,7 +84,13 @@ function update()
       log_channel_error(key)
     else
       -- once open use the address of the sensor
-      i2c_bus:set_address(sensor_addr)
+      if value == 0 then
+        i2c_bus:set_address(0x68)
+      elseif value == 1 then
+        i2c_bus:set_address(0x38)
+      elseif value == 2 then
+        i2c_bus:set_address(0x48)
+      end
       -- read_registers(begin at register, number of bytes to read)
       returnTable = i2c_bus:read_registers(0, 2)
 
@@ -107,10 +113,15 @@ function update()
   end
 
   log_data()
+  -- gcs:send_text(7, tostring(channel_numbers[1]) .. " | " .. tostring(log_data_list[1]))
+  -- gcs:send_text(7, tostring(channel_numbers[2]) .. " | " .. tostring(log_data_list[2]))
+
+
   -- send_text(priority level (7 is Debug), text as a string formatted to float)
   -- report data to misson planner output
   gcs:send_text(7, "chan " .. string.format("%d: %.3f | ", channel_numbers[1], log_data_list[1]) ..
-                   "chan " .. string.format("%d: %.3f ", channel_numbers[2], log_data_list[2])
+                   "chan " .. string.format("%d: %.3f | ", channel_numbers[2], log_data_list[2]) ..
+                   "chan " .. string.format("%d: %.3f ", channel_numbers[3], log_data_list[3])
   )
 
   i2c_bus:set_address(0x00)
