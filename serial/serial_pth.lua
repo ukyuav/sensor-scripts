@@ -117,17 +117,17 @@ function parse_data(message_string)
     table.insert(measurements_table, data_table[i])
   end
 
+-- report data to Mission Planner, not necessary all the time
+  gcs:send_text(7, "pres:" .. string.format(" %.2f \r\n", measurements_table[1]) ..
+                   "temp1:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
+                   "temp2:" .. string.format(" %.2f \r\n", measurements_table[3]) ..
+                   "hum:" .. string.format(" %.2f \r\n", measurements_table[4]) ..
+                   "temp3:" .. string.format(" %.2f", measurements_table[5])
+  )
+
   -- return whether data input data matched needed format (table with 5
   -- elements)
   return log_data(measurements_table)
-
--- report data to Mission Planner, not necessary all the time
---   gcs:send_text(7, "\r\npres:" .. string.format(" %.2f \r\n", measurements_table[1]) ..
---                    "temp1:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
---                    "temp2:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
---                    "hum:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
---                    "temp3:" .. string.format(" %.2f \r\n", measurements_table[2])
---   )
 
 end
 
@@ -187,7 +187,7 @@ function update()
 
   -- If we are in the middle of recieving a message,
   -- simply wait for the rest of the message to arrive
-  while (n_bytes > 0 and n_bytes < 60)  do
+  if (n_bytes > 0 and n_bytes < 60)  then
     return update, 250
   end
 
@@ -195,7 +195,7 @@ function update()
     if n_bytes >= 120 then
       gcs:send_text(7, "Bytes available: " .. tostring(n_bytes))
     end
-    -- only read a max of 120 bytes in a go
+    -- only read a max of 60 bytes in a go
     -- this limits memory consumption
     local buffer = {} -- table to buffer data
     local bytes_target = n_bytes - math.min(n_bytes, 60)
