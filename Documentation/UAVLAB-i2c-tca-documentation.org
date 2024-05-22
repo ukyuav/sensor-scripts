@@ -1,5 +1,6 @@
-#+title:  I^{2}C  Pressure Transducers /w TCA9548 Multiplexer
+#+title:  I^{2}C  Pressure Transducers with a TCA9548 Multiplexer
 #+author: Justin Tussey
+#+date: 2024-05-22
 #+options: toc:2
 
 #+begin_comment
@@ -12,16 +13,11 @@ https://github.com/Wandmalfarbe/pandoc-latex-template <- main link
 
 
 * Table of Contents :toc:
-- [[#overview][Overview]]
 - [[#code-overview][Code Overview]]
   - [[#global-values-and-initialization][Global Values and Initialization]]
   - [[#tca-channel-selecting][TCA Channel Selecting]]
   - [[#logging][Logging]]
   - [[#update][Update]]
-- [[#important-links][Important Links]]
-
-* Overview
-
 
 * Code Overview
 ** Global Values and Initialization
@@ -58,31 +54,31 @@ Mission Planner.
 
 #+begin_src lua
 -- var for address of the sensors
-local sensor_addr = 0x28
+local SENSOR_ADDR = 0x28
 
 -- var for list of which channels on the multiplexer are connected
-local channel_numbers = {#, #, #, #, #}
+local CHANNEL_NUMBERS = {#, #, #, #, #}
 
 -- for each TCA9548A, add an entry with its address
 -- 0x70 is default, to add more set or reset A0, A1, A2
 TCA_ADDRESSES = {0x70}
 #+end_src
 
-We store the shared sensor address in the ~sensor_addr~, this prevent us from
+We store the shared sensor address in the ~SENSOR_ADDR~, this prevent us from
 having to use a unnamed constant when referring to the sensors address later in
 the script. This also reduces the amount of changes needed to change to a
 different sensor with a different address.
 
-The ~channel_numbers~ table stores the channels on the multiplexer that we want
+The ~CHANNEL_NUMBERS~ table stores the channels on the multiplexer that we want
 to read data from. These can range from 0-7, corresponding to the channels on
 the multiplexer. These can be set in any order if one wishes to have specific
-sensors log to specific columns in the BIN files. In the code snippet above,
-the channel numbers are replaces with "=#=" as a placeholder.
+sensors log to specific columns in the BIN files. In the code snippet above, the
+channel numbers are replaces with "=#=" as a placeholder.
 
 The ~TCA_ADDRESSES~ table stores the address of the mulitplexer (TCA). Currently
-this has only one TCA address, as we only plan to connect one mulitplexer to each
-autopilot. You can add more addresses to the table, and read data from multiple
-multiplexers (along with minor modification to the script).
+this has only one TCA address, as we only plan to connect one mulitplexer to
+each autopilot. You can add more addresses to the table, and read data from
+multiple multiplexers (along with minor modification to the script).
 
 ** TCA Channel Selecting
 #+begin_src lua
@@ -108,16 +104,46 @@ function tcaselect(tca, channel)
 end
 #+end_src
 
+The ~tcaselect()~ function is responsible for telling the multiplexer what
+channel it should be listening to.
+
+We start by setting what I^{2}C device address we are going to read and write
+from to the address of the multiplexer. We first check that the TCA index then
+we set the address, if it is not a valid address, we return false for the caller
+to handle.
+
+After that we check the channel number that was passed in and make sure it is
+withing the range of channels on the multiplexer, which is 0-7, if not we return
+false.
+
+To select the channel, we write data to a register on the multiplexer. We use
+the ~write_register()~ method with the multiplexer address and the number one,
+bitwise left shifted by the number of the channel we select.
+
+By left shifting the number one by the channel number, we send a binary number
+with only one bit set to one. The position of that bit specifies which channel
+we would like to listen to.
+
+#+begin_example
+         7654 3210
+1 << 0 = 0000 0001 <- channel 0
+1 << 1 = 0000 0010 <- channel 1
+1 << 2 = 0000 0100 <- channel 2
+1 << 3 = 0000 1000 <- channel 3
+1 << 4 = 0001 0000 <- channel 4
+1 << 5 = 0010 0000 <- channel 5
+1 << 6 = 0100 0000 <- channel 6
+1 << 7 = 1000 0000 <- channel 7
+#+end_example
+
+Above we can see a chart of what each operation looks like to select each channel.
+
+Once we select the channel on the TCA, we then return true for the caller to handle.
+
 ** Logging
 *** Logging Data To Bin
 #+begin_src lua
 function log_data()
-  -- care must be taken when selecting a name, must be less than four characters and not clash with an existing log type
-  -- format characters specify the type of variable to be logged, see AP_Logger/README.md
-  -- https://github.com/ArduPilot/ardupilot/tree/master/libraries/AP_Logger
-  -- not all format types are supported by scripting only: i, L, e, f, n, M, B, I, E, and N
-  -- Data MUST be integer|number|uint32_t_ud|string , type to match format string
-  -- lua automatically adds a timestamp in micro seconds
   logger:write('SENS','s1,s2,s3,s4,s5,err1,err2,err3,err4,err5','NNNNNNNNNN',
                log_data_list[1],
                log_data_list[2],
@@ -171,7 +197,7 @@ the sensor.
 ** Update
 #+begin_src lua
 function update()
-  for key, value in pairs(channel_numbers) do
+  for key, value in pairs(CHANNEL_NUMBERS) do
 
     -- select TCA module 1, and channel i
     if not (tcaselect(1, value)) then
@@ -180,17 +206,17 @@ function update()
 #+end_src
 
 For the main loop in the script, we start by iterating through the list of
-channels in ~channel_numbers~. We tell the TCA to switch to channel =i= with the
+channels in ~CHANNEL_NUMBERS~. We tell the TCA to switch to channel =i= with the
 ~tcaselect()~ function. If ~tcaselect()~ returns false meaning we called a
 channel that does not exist on the multiplexer, we then send an error message to
-the Misson Planner output, specifiying which channel is invalid, and call the
+the Mission Planner output, specifying which channel is invalid, and call the
 ~log_channel_error()~ function. We then skip the rest of the loop and start on
 the next iteration
 
 #+begin_src lua
     else
       -- once open use the address of the sensor
-      i2c_bus:set_address(sensor_addr)
+      i2c_bus:set_address(SENSOR_ADDR)
       -- read_registers(begin at register, number of bytes to read)
       returnTable = i2c_bus:read_registers(0, 2)
 
@@ -201,21 +227,27 @@ the next iteration
 #+end_src
 
 If we successfully switch the channel on the multiplexer, we can continue to
-read data from the sensors. We set the sensor address we are going to read from, since
-~tcaselect()~ sets that to the TCA's address to select the channel.
+read data from the sensors. We set the sensor address we are going to read from,
+since ~tcaselect()~ sets that to the TCA's address to select the channel.
 
-We then read two bytes from the I^{2}C bus with the ~read_registers()~ method, which
-returns a table with the bytes we read from the I^{2}C bus. We store this table in the
-~returnTable~ variable.
+We then read two bytes from the I^{2}C bus with the ~read_registers()~ method.
 
-We first check if ~returnTable~ is empty or ~nil~, if it is empty, this means that
-~read_registers()~ did not receive any data from the I^{2}C bus. This is most likely
-caused by the sensor on that channel being disconnected, or the data and clock lines of the
-I^{2}C bus are experiencing a lot of noise.
+#+begin_quote
+The two arguments in ~read_registers()~ define the offset (in our case =0=), and
+how many bytes we would like to read (which is =2= in our case).
+#+end_quote
 
-If this is the case, we send an error message to Mission Planner saying that the sensor
-on channel =i= is disconnected. We then log an error and skip the rest of the
-loop and start on the next iteration.
+~read_registers()~ returns a table with the bytes we read from the I^{2}C bus.
+We store this table in the ~returnTable~ variable.
+
+We first check if ~returnTable~ is empty or ~nil~, if it is empty, this means
+that ~read_registers()~ did not receive any data from the I^{2}C bus. This is
+most likely caused by the sensor on that channel being disconnected, or the data
+and clock lines of the I^{2}C bus are experiencing a lot of noise.
+
+If this is the case, we send an error message to Mission Planner saying that the
+sensor on channel =i= is disconnected. We then log an error and skip the rest of
+the loop and start on the next iteration.
 
 #+begin_src lua
       else
@@ -233,12 +265,90 @@ loop and start on the next iteration.
   end
 #+end_src
 
+If we get data from the I^{2}C bus, we then can process it. In the table below
+we can see that the pressure data is stored in bits 29-16. Since this is 14 bits
+in total, we need to read two bytes from the bus, which is 16 bits.
+
+#+caption: Diagram of the data sent by the pressure sensors
+#+name: I^{2}C Messge Data Diagram
+[[file:images/i2c/i2c-pressure-sensor-data.png]]
+
+After we get the two bytes from the bus, we need to take the bytes in
+~returnTable~ and reconstruct the whole number from them. We do this by
+performing a bitwise left-shift 8 times. Doing this gives us room to place the
+second byte of the data at the end by performing an OR operation. Below is an
+example of what is happening. (Note this data is random and not representative
+of what data is sent by the sensors)
+
+#+begin_example
+1110 1101 << 8 = 1110 1101 0000 0000
+1110 1101 0000 0000 | 0011 0110 = 1110 1101 0011 0110
+#+end_example
+
+The above operations essentially take the two bytes stored and place them in the
+correct order into a singular number.
+
+Since we do not need the first two bits of the data from the I^{2}C bus we can
+perform a bitwise operation on the data. In our case we will AND the data with
+the hexadecimal value =0x3FFF=.
+
+For example, we have the below data (note this data is random and not
+representative of what data is sent by the sensors).
+
+#+begin_example
+1110 1101 0011 0110
+#+end_example
+
+Since we want to remove the first two bits of the data, we will AND it with
+=0x3FFF=, which is represented in binary below.
+
+#+begin_example
+0011 1111 1111 1111
+#+end_example
+
+Once we perform the AND operation with =0x3FFF=, as can be seen below, we
+preserve the pressure data but remove the unnecessary data that we do not want
+to interpret.
+
+#+begin_example
+  1110 1101 0011 0110
+& 0011 1111 1111 1111
+---------------------
+= 0010 1101 0011 0110
+#+end_example
+
+Once we have formatted our data, we can now normalize the data. According to the
+sensors data sheet, the range of the sensors is [-2, 2] in H_{2}O.
+
+The formula for this normalization can be seen below
+
+\begin{equation*}
+\frac{range \cdot data}{\max(data) - 2}
+\end{equation*}
+
+In our case the maximum of our data is =0x3FFF=, which is a number where all 14
+bits are set to one.
+
+After we have normalized our data we then convert it to a string to be
+stored in our ~log_data_list~ table. Here since we have not hit any errors
+up until this point, we will also set the error for channel =i= to "NORMAL",
+since there are no errors to log
+
+
+Once we have gone through each channel and logged their data (or their errors if
+they have any), we get out of the for loop and get to the following code
+snippet.
+
 #+begin_src lua
   log_data()
   -- send_text(priority level (7 is Debug), text as a string formatted to float)
   -- report data to misson planner output
-  gcs:send_text(7, "chan " .. string.format("%d: %.3f | ", channel_numbers[1], log_data_list[1]) ..
-                   "chan " .. string.format("%d: %.3f ", channel_numbers[2], log_data_list[2])
+  gcs:send_text(7, "chan " .. string.format("%d: %.3f | ", CHANNEL_NUMBERS[1], log_data_list[1]) ..
+                   "chan " .. string.format("%d: %.3f | ", CHANNEL_NUMBERS[2], log_data_list[2]) ..
+                   "chan " .. string.format("%d: %.3f | ", CHANNEL_NUMBERS[3], log_data_list[3]) ..
+                   "chan " .. string.format("%d: %.3f | ", CHANNEL_NUMBERS[4], log_data_list[4]) ..
+                   "chan " .. string.format("%d: %.3f ", CHANNEL_NUMBERS[5], log_data_list[5])
+
   )
 
   i2c_bus:set_address(0x00)
@@ -246,4 +356,17 @@ loop and start on the next iteration.
 end
 #+end_src
 
-* Important Links
+First we call the ~log_data()~ function, which takes the data we have placed
+into the ~log_data_list~ and ~error_list~ tables and logs their data to the BIN
+file.
+
+Then we can send the data we have collected to the Mission Planner output. This
+is optional but is helpful to verify the sensors are sending logical data. The
+above message assumes that there are 5 sensors connected, but this can be
+modified for other configurations.
+
+We then set the address of the I^{2}C device we are reading to zero to prepare
+for the next iteration of the ~update()~ function. We then return the function,
+and schedule the ~update()~ function to run again in 50 milliseconds.
+
+#  LocalWords:  bitwise
