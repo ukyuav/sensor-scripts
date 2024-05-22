@@ -174,8 +174,8 @@ total these names cannot exceed 64 characters.
 Here we have to major sections of data, the actual data collected and processed
 by the sensor, and if there were any errors collecting the data from that
 channel on the multiplexer. The pressure data is the data that is reported from
-the sensor, and is normalized to $[-2, 2]$ in H_{2}O. The errors simply log
-="NORMAL"= or ="ERROR"= depending on the state of the channel at the time the
+the sensor, and is normalized to [-2, 2] in H_{2}O. The errors simply log
+"=NORMAL=" or "=ERROR=" depending on the state of the channel at the time the
 data is recording.
 
 *** Logging Errors
@@ -187,7 +187,7 @@ end
 #+end_src
 
 This function logs an error for the channel index that is specified. It simply
-sets the data value to zero and places the word "ERROR" into the error list to
+sets the data value to zero and places the word "=ERROR=" into the error list to
 be logged.
 
 This function is called whenever there is an issue with specific channel on the
@@ -322,16 +322,14 @@ sensors data sheet, the range of the sensors is [-2, 2] in H_{2}O.
 
 The formula for this normalization can be seen below
 
-\begin{equation*}
-\frac{range \cdot data}{\max(data) - 2}
-\end{equation*}
+$$ \frac{range \cdot data}{\max(data) - 2} $$
 
 In our case the maximum of our data is =0x3FFF=, which is a number where all 14
 bits are set to one.
 
 After we have normalized our data we then convert it to a string to be
 stored in our ~log_data_list~ table. Here since we have not hit any errors
-up until this point, we will also set the error for channel =i= to "NORMAL",
+up until this point, we will also set the error for channel =i= to "=NORMAL=",
 since there are no errors to log
 
 
