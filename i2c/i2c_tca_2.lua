@@ -22,10 +22,10 @@ i2c_bus:set_retries(10)
 gcs:send_text(7, "i2c_tca Script Started!")
 
 -- var for address of the sensors
-local sensor_addr = 0x28
+local SENSOR_ADDR = 0x28
 
 -- var for list of which channels on the multiplexer are connected
-local channel_numbers = {
+local CHANNEL_NUMBERS = {
   0,
   1,
   2
@@ -76,7 +76,7 @@ end
 
 -- MAIN FUNCTION
 function update()
-  for key, value in pairs(channel_numbers) do
+  for key, value in pairs(CHANNEL_NUMBERS) do
 
     -- select TCA module 1, and channel i
     if not (tcaselect(1, value)) then
@@ -119,9 +119,9 @@ function update()
 
   -- send_text(priority level (7 is Debug), text as a string formatted to float)
   -- report data to misson planner output
-  gcs:send_text(7, "chan " .. string.format("%d: %.3f | ", channel_numbers[1], log_data_list[1]) ..
-                   "chan " .. string.format("%d: %.3f | ", channel_numbers[2], log_data_list[2]) ..
-                   "chan " .. string.format("%d: %.3f ", channel_numbers[3], log_data_list[3])
+  gcs:send_text(7, "chan " .. string.format("%d: %.3f | ", CHANNEL_NUMBERS[1], log_data_list[1]) ..
+                   "chan " .. string.format("%d: %.3f | ", CHANNEL_NUMBERS[2], log_data_list[2]) ..
+                   "chan " .. string.format("%d: %.3f ", CHANNEL_NUMBERS[3], log_data_list[3])
   )
 
   i2c_bus:set_address(0x00)
