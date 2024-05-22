@@ -1,5 +1,6 @@
 #+title: UAVLAB Serial PTH (Samamet) Script Documentation
 #+author: Justin Tussey
+#+date: 2024-05-22
 #+options: toc:2
 
 #+begin_comment
@@ -80,12 +81,16 @@ PORT:set_flow_control(0)
 This sets up the serial connection between the PTH and the flight controller.
 A baudrate of 9600 is used since this is the speed the sensor operates at.
 
-After we set the baudrate, we then find the serial port that is currently open
-and using protocol 28, which is the ArduPilot protocol for scripting.
+After we set the baudrate, we then find the first serial port that is currently
+open and using protocol 28, which is the ArduPilot protocol for scripting.
 
 #+begin_quote
-*NOTE*: make sure to set the correct baudrate of 9600 and protocol 28 on the
-serial line being used to ensure the sensor is connected.
+*NOTE*:
+1. make sure to set the correct baudrate of 9600 and protocol 28 on the serial
+   line being used to ensure the sensor is connected.
+2. If you have multiple serial ports set to protocol 28 (Scripting), make sure
+   to have the Samamet on the highest port, or to set the =0= in ~find_serial()~
+   to a =1= to find the second port.
 #+end_quote
 
 If we cannot find a serial port with the scripting protocol, the script throws
@@ -283,7 +288,8 @@ If we find that the checksum is invalid, we report this error to Mission Planner
 and do ~log_error()~ to log an error in the BIN file.
 
 Once the data is verified, we can begin parsing and logging the data. The
-specifics will be discussed futher in the [[#logging]["Logging"]] and [[#parsing-data]["Parsing Data"]] sections.
+specifics will be discussed further in the [[#logging]["Logging"]] and [[#parsing-data]["Parsing Data"]]
+sections.
 
 We start by extracting the "main body" of the message into a string. We then
 take each section of the message, which is delimited by commas, and place them
@@ -366,9 +372,9 @@ end
 #+end_src
 
 We first take the message string and perform a regular expression (regex or
-regexp) match on the string. Here the Lua regex '=%$(.*)%*=' first looks for a
-'=$=', once it finds one, it then matches any characters after the '=$=' up
-until it finds a '=*='. This extracts the main body of the message, which
+regexp) match on the string. Here the Lua regex "~%$(.*)%*~" first looks for a
+"~$~", once it finds one, it then matches any characters after the "~$~" up
+until it finds a "~*~". This extracts the main body of the message, which
 contains the data that we need to process for logging. An example of a full
 message can be seen below.
 
@@ -381,11 +387,11 @@ returned a value of ~nil~. We check for this, and if this is true, we return
 false for the caller to handle.
 
 We then perform another regex on the message string again to extract the
-checksum. The regex '=%*([0-9A-F][0-9A-F])=' first finds a '=*='. After it finds
+checksum. The regex "~%*([0-9A-F][0-9A-F])~" first finds a "~*~". After it finds
 one, it then matches exactly two characters. Since we are matching for a
 hexadecimal number, the regex will only accept characters in hexadecimal
-numbers. This includes all digits between zero and nine, and all upper case
-version of letters between and including A-F.
+numbers. This includes all digits between zero and nine, and all capital version
+of letters between and including A-F.
 
 Once we have extracted the checksum, we verify that the regex was successful by
 making sure the resulting string is not ~nil~. If it is ~nil~, we return false
@@ -462,25 +468,18 @@ function parse_data(message_string)
     table.insert(measurements_table, data_table[i])
   end
 
--- report data to Mission Planner, not necessary all the time
-  gcs:send_text(7, "pres:" .. string.format(" %.2f \r\n", measurements_table[1]) ..
-                   "temp1:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
-                   "temp2:" .. string.format(" %.2f \r\n", measurements_table[3]) ..
-                   "hum:" .. string.format(" %.2f \r\n", measurements_table[4]) ..
-                   "temp3:" .. string.format(" %.2f", measurements_table[5])
-  )
+  -- report data to Mission Planner, not necessary all the time
+  -- (OMMITED HERE FOR BREVITY)
 
-  -- return whether data input data matched needed format (table with 5
-  --elements)
   return log_data(measurements_table)
 
 end
 #+end_src
 
 We first take the message string and perform a regular expression (regex or
-regexp) match on the string. Here the Lua regex '=%$(.*)%*=' first looks for a
-'=$=', once it finds one, it then matches any characters after the '=$=' up
-until it finds a '=*='. This extracts the main body of the message, which
+regexp) match on the string. Here the Lua regex "~%$(.*)%*~" first looks for a
+"~$~", once it finds one, it then matches any characters after the "~$~" up
+until it finds a "~*~". This extracts the main body of the message, which
 contains the data that we need to process for logging. An example of a full
 message can be seen below.
 
@@ -497,8 +496,8 @@ the date from it. First we initialize the ~data_table~ table, which is where
 we will store each of the messages sections for processing.
 
 Next we perform another regex on the message body. Here the regex
-'=([^" ..",".. "]+)=', or more simply written as '=([^,]+)=' takes the string,
-and matches every character up until it finds a '=,='. It does this for all
+"~([^" ..",".. "]+)~", or more simply written as "~([^,]+)~" takes the string,
+and matches every character up until it finds a "~,~". It does this for all
 of the segments in the string. We then use the for loop to iterate over all of
 these segments and place them into are previously defined ~data_table~.
 
@@ -652,4 +651,4 @@ paper.
 8. Lua Pattern Tester
    + https://montymahato.github.io/lua-pattern-tester/
 
-#  LocalWords:  ArduPilot Lua regexes
+#  LocalWords:  ArduPilot Lua regexes Samamet
