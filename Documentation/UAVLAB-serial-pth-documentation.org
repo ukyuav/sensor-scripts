@@ -36,13 +36,11 @@ that it is organized in the file.
 -- variable to count iterations without getting message
 local loops_since_data_received = 0
 
--- variables to count number of bytes available on serial line
-local previous_n_bytes = 0
-local n_bytes = 0
-
+-- table to hold the message that is currently being assembled
+local message_table = {}
 
 -- error type table
-local error_list = {
+local ERROR_LIST = {
   "No data received",      -- 1
   "Checksum fail",         -- 2
   "Data parsing fail",     -- 3
@@ -54,13 +52,10 @@ of data has been received on the serial line. If this value goes above a certain
 count, we can assume that the sensor is most likely disconnected, and can report
 and log an error
 
-The ~n_bytes~ and ~previous_n_bytes~ variables store the amount of bytes
-available to read from the serial line, and the bytes available to read on the
-last iteration of the script respectively. We can use this data to check and see
-if the sensor has stopped sending data in the middle of a transmission. Which
-cannot be picked up if we only check if ~n_bytes~ is zero.
+The ~message_table~ table stores the bytes of the message that we are currently
+assembling.
 
-The ~error_list~ table holds a list of possible errors we can receive. We use
+The ~ERROR_LIST~ table holds a list of possible errors we can receive. We use
 this list to pass through the kind of error we are experiencing to the
 ~log_error()~ function to be logged in the BIN file for later reference.
 
@@ -110,126 +105,93 @@ return update() -- run immediately before starting to reschedule
 This statement calls the ~update()~ function, which is the main function in most
 ArduPilot lua scripts.
 
-#+caption: First snippet of the ~update()~ function.
 #+begin_src lua
-function update()
-  previous_n_bytes = n_bytes
-  n_bytes = PORT:available()
+  local n_bytes = PORT:available()
 
   -- If we have received no bytes or have not received any new bytes, increment
-  -- the count of loops without data. If it reaches 6 or more
-  -- (250ms * 6 = 1.5sec), then log an error.
-  if (n_bytes <= 0) or (n_bytes == previous_n_bytes) then
+  -- the count of loops without data. If it reaches 11 or more
+  -- (100ms * 11 = 1.1sec), then log an error.
+  if n_bytes <= 0 then
     loops_since_data_received = loops_since_data_received + 1
-    if loops_since_data_received >= 6 then
-      log_error(error_list[1])
+    if loops_since_data_received >= 11 then
+      log_error(ERROR_LIST[1])
+      -- Send error message to mission planner with priority 0 (error)
       gcs:send_text(0, "ERROR: PTH has failed to send data")
-      gcs:send_text(0, "Bytes received: " .. tostring(n_bytes))
+      -- clear incomplete message (if there is one)
+      message_table = {}
     end
-      return update, 250
-  else
-    loops_since_data_received = 0
-  end
-
-  -- If we are in the middle of recieving a message,
-  -- simply wait for the rest of the message to arrive
-  if (n_bytes > 0 and n_bytes < 60)  then
-    return update, 250
+    return update, 100
   end
 #+end_src
 
-We first set the value of ~previous_n_bytes~ to the current ~n_bytes~ value, and
-then read the number of bytes that are available to read on the serial bus.
+First we update ~n_bytes~ and we check if it is zero. If it is zero, this means
+that there is no new data on the bus, meaning the sensor is disconnected, or it
+has not sent its data yet.
 
-Once we update ~n_bytes~, we check if it is zero. If it is zero, this means that
-there is no new data on the bus, meaning the sensor is disconnected, or it has
-not sent its data yet. We also check if the bytes on the previous loop are the
-same as the current bytes available, which signals to us that the sensor has
-stopped working in the middle of a data transmission.
+Since we run the loop ten times per second we keep track of how many loops have
+gone by with the ~loops_since_data_received~ counter. If we reach eleven or more
+iterations without new data, we log an error with the ~log_error()~ function
+(This will be discussed further in the [[#logging]["Logging"]] section), send an error out to
+the Mission Planner output and clear the current message that has been parsed in
+the event that the sensor was disconnected in the middle of a data transmission.
 
-If either of these conditions are true, we increment the
-~loops_since_data_received~ counter. We use this variable to keep track of how
-many times the script has ran without receiving new data. If we reach six or
-more iterations without new data, we log an error with the ~log_error()~
-function (This will be discussed further in the [[#logging]["Logging"]] section) and send an
-error out to the Mission Planner output.
+We derive this number of failed loops from how often we schedule the ~update()~
+function to run, which is every 100 milliseconds, and how often the PTH sends
+out its data, which is every second. To ensure that we are not flagging the time
+in between data transmissions from the sensor as an error, we need to wait more
+than one second. By waiting for eleven failed loops, we guarantee that we are
+waiting at least 1.1 seconds before we log an error ($100\text{ms} \cdot 11 =
+1100 = 1.1\text{sec}$). This gives the PTH time to send its data and will
+prevent us from logging any false errors.
+
 
 #+begin_src lua
-gcs:send_text(0, "ERROR: PTH has failed to send data")
-#+end_src
-
-The ~send_text()~ method takes two arguments. The first being the priority/type
-of message we are sending.  In this case, we use priority ~0~, which specifies
-that this is an error message and needs to be displayed immediately. The second
-argument is simply a string that contains the message that will be sent.
-
-As mentioned above, we wait for 6 failed loops before we log an error. We derive
-this number of failed loops from how often we schedule the ~update()~ function
-to run, which is every 250 milliseconds, and how often the PTH sends out its
-data, which is every second. To ensure that we are not flagging the time in
-between data transmissions from the sensor as an error, we need to wait more
-than one second. By waiting for six failed loops, we guarantee that we are
-waiting at least one and a half seconds before we log an error ($250\text{ms}
-\cdot 6 = 1500 = 1.5\text{sec}$). This gives the PTH plenty of time to send its
-data and will prevent us from logging any false errors.
-
-If we get passed the above checks, we then verify if we are in the middle of a
-data transmission. If we are, we simply return and reschedule the ~update()~
-function since we do not want to process an incomplete data transmission.
-
-#+CAPTION: Second snippet of the ~update()~ function.
-#+begin_src lua
+  -- read bytes from the serial line until we hit '0x0A' which is <LF>, the
+  -- ending of the message. Then process the message
+  loops_since_data_received = 0
   while n_bytes > 0 do
-    -- only read a max of 60 bytes in a go
-    -- this limits memory consumption
-    local buffer = {} -- table to buffer data
-    local bytes_target = n_bytes - math.min(n_bytes, 60)
-    while n_bytes > bytes_target do
-      table.insert(buffer,PORT:read())
-      n_bytes = n_bytes - 1
+    local byte = PORT:read()
+    if byte == 0x0A then
+      -- ommited for later section
     end
-#+end_src
-
-If we pass the above checks, we know that we have received a full message from
-the Samamet and we can now begin to process the data.
-
-We first take the amount of bytes available on the line and limit the amount we
-will read to 60 bytes. We do this to ensure we only process one message at a
-time if we were to have multiple messages on the serial bus (which very unlikely
-given the previous checks).
-
-We then loop, reading the bytes from the serial line, appending them to
-our table called ~buffer~.
-
-#+begin_quote
-The primary loop that reads the data from the serial line is also pulled from
-the ArduPilot [[https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Scripting/examples/Serial_Dump.lua][Serial Dump example]].
-#+end_quote
-
-#+CAPTION: Third snippet of the ~update()~ function.
-#+begin_src lua
-    local data = string.char(table.unpack(buffer))
-    -- check if checksum is valid
-    if (verify_checksum(data)) then
-      -- make sure that data is logged correctly
-      if not (parse_data(data)) then
-        log_error(error_list[3])
-        gcs:send_text(0, "ERROR: PTH data was not successfully parsed or not written to BIN file correctly!")
-        gcs:send_text(0, "Incoming string: " .. data .. string.format(" size: %d", #data))
-      end
-    else
-      log_error(error_list[2])
-      gcs:send_text(0, "ERROR: PTH Data failed checksum, check sensor!")
-      gcs:send_text(0, "Incoming string: " .. data .. string.format(" size: %d", #data))
-    end
+    table.insert(message_table, byte)
+    n_bytes = n_bytes - 1
   end
 
-  return update, 250 -- reschedules the loop every 250ms
-end
+  return update, 100 -- schedule the update function to
 #+end_src
 
-Once we have placed the message from the serial line into our ~buffer~ table, we
-can concatenate it into a string in the variable ~data~.
+If there are any bytes available, we read one off of the serial line. We first
+check if it is the ASCII character =0x0A=, which is the 'line feed' or =<LF>=
+character. Which is that character that the Samamet uses to signify the end of a
+message. If it is not this character, we simply add the byte to ~message_table~
+and repeat the loop again if there are any more bytes in the queue.
+
+
+#+begin_src lua
+    if byte == 0x0A then
+      table.insert(message_table, byte)
+      local message_string = string.char(table.unpack(message_table))
+      if not (verify_checksum(message_string)) then
+        log_error(ERROR_LIST[2])
+        gcs:send_text(0, "ERROR: PTH Data failed checksum")
+        message_table = {}
+        return update, 100
+      end
+      if not (parse_data(message_string)) then
+        log_error(ERROR_LIST[3])
+        gcs:send_text(0, "ERROR: Failed to parse data")
+        message_table = {}
+        return update, 100
+      end
+      -- reset for the next message
+      message_table = {}
+      return update, 100
+    end
+#+end_src
+
+If we find that the byte we read is in fact the line feed character, we know we
+have a full message we can decode.
 
 First we verify that the checksum provided with the message, is correct. This
 occurs in the ~verify_checksum()~ function, the specifics of which will be
@@ -284,8 +246,8 @@ calculated, to the checksum sent with the message. If the two values do not
 match, we know that the data contained within the message, or the checksum bytes
 themselves, are corrupted in some manner.
 
-If we find that the checksum is invalid, we report this error to Mission Planner
-and do ~log_error()~ to log an error in the BIN file.
+If we find that the checksum is invalid, we report this error to Mission Planner,
+call ~log_error()~ to log an error in the BIN file, and clear ~message_table~.
 
 Once the data is verified, we can begin parsing and logging the data. The
 specifics will be discussed further in the [[#logging]["Logging"]] and [[#parsing-data]["Parsing Data"]]
@@ -308,28 +270,18 @@ required size of 5 elements, it will return false, and not log the data.  the
 
 When ~parse_data()~ returns false in the above case, or the other cases the
 function can detect, ~update()~ reports to Mission Planner that the data
-was not successfully and logs and error.
-
-~update()~ also will report the string that it read which failed the checks,
-and report its size. This is primarily for debugging purposes.
-
-#+begin_src lua
-if not (parse_data(data)) then
-  log_error(error_list[3])
-  gcs:send_text(0, "ERROR: PTH data was not successfully parsed or not written to BIN file correctly!")
-  gcs:send_text(0, "Incoming string: " .. data .. string.format(" size: %d", #data))
-end
-#+end_src
+was not successfully, logs an error, and resets the message table.
 
 If both ~verify_checksum()~ and ~parse_data()~ return true, the data that was
-read from the serial line was successfully logged. We can now continue and
-reschedule the ~update()~ function to read the next message.
+read from the serial line was successfully logged. We can now clear the message
+table for the next message and continue to reschedule the ~update()~ function to
+read the next message.
 
 #+begin_src lua
   return update, 250 -- reschedules the loop every 250ms
 #+end_src
 
-Here we schedule the update function to return every 250 milliseconds. We
+Here we schedule the update function to return every 100 milliseconds. We
 schedule the loop to run significantly faster that what the Samamet to prevent
 cases where we receive more than one message for each run of the ~update()~
 function. Receiving more than one message causes us to log the messages that
