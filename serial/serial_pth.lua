@@ -5,7 +5,7 @@ Read the data from the serial line that the PTH is connected to, then decode the
 messages from it, and log the data to the autopilots BIN file.
 
 Author: Justin Tussey
-Last Updated: 2024-05-20
+Last Updated: 2024-05-24
 ]] --
 
 -- variable to count iterations without getting message
@@ -18,7 +18,7 @@ local message_table = {}
 
 
 -- error type table
-local error_list = {
+local ERROR_LIST = {
   "No data received",      -- 1
   "Checksum fail",         -- 2
   "Data parsing fail",     -- 3
@@ -176,7 +176,7 @@ function update()
   if n_bytes <= 0 then
     loops_since_data_received = loops_since_data_received + 1
     if loops_since_data_received >= 11 then
-      log_error(error_list[1])
+      log_error(ERROR_LIST[1])
       gcs:send_text(0, "ERROR: Disconnected Sensor")
       -- clear incomplete message (if there is one)
       message_table = {}
@@ -193,13 +193,13 @@ function update()
       table.insert(message_table, byte)
       local message_string = string.char(table.unpack(message_table))
       if not (verify_checksum(message_string)) then
-        log_error(error_list[2])
+        log_error(ERROR_LIST[2])
         gcs:send_text(0, "ERROR: PTH Data failed checksum")
         message_table = {}
         return update, 100
       end
       if not (parse_data(message_string)) then
-        log_error(error_list[3])
+        log_error(ERROR_LIST[3])
         gcs:send_text(0, "ERROR: Failed to parse data")
         message_table = {}
         return update, 100
