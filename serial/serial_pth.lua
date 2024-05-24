@@ -11,11 +11,8 @@ Last Updated: 2024-05-24
 -- variable to count iterations without getting message
 local loops_since_data_received = 0
 
--- -- variables to count number of bytes available on serial line
--- local previous_n_bytes
--- local n_bytes
+-- table to hold the message that is currently being assembled
 local message_table = {}
-
 
 -- error type table
 local ERROR_LIST = {
@@ -177,7 +174,8 @@ function update()
     loops_since_data_received = loops_since_data_received + 1
     if loops_since_data_received >= 11 then
       log_error(ERROR_LIST[1])
-      gcs:send_text(0, "ERROR: Disconnected Sensor")
+      -- Send error message to mission planner with priority 0 (error)
+      gcs:send_text(0, "ERROR: PTH has failed to send data")
       -- clear incomplete message (if there is one)
       message_table = {}
     end
@@ -212,7 +210,7 @@ function update()
     n_bytes = n_bytes - 1
   end
 
-  return update, 100 -- schedule the update function to
+  return update, 100 -- reschedules the loop for every 100ms
 end
 
 return update() -- run immediately before starting to reschedule
