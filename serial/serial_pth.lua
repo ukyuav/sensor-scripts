@@ -11,9 +11,10 @@ Last Updated: 2024-05-20
 -- variable to count iterations without getting message
 local loops_since_data_received = 0
 
--- variables to count number of bytes available on serial line
-local previous_n_bytes = 0
-local n_bytes = 0
+-- -- variables to count number of bytes available on serial line
+-- local previous_n_bytes
+-- local n_bytes
+local message_table = {}
 
 
 -- error type table
@@ -167,62 +168,51 @@ end
 
 
 function update()
-  previous_n_bytes = n_bytes
-  n_bytes = PORT:available()
+  local n_bytes = PORT:available()
 
   -- If we have received no bytes or have not received any new bytes, increment
-  -- the count of loops without data. If it reaches 6 or more
-  -- (250ms * 6 = 1.5sec), then log an error.
-  if (n_bytes <= 0) or (n_bytes == previous_n_bytes) then
+  -- the count of loops without data. If it reaches 11 or more
+  -- (100ms * 11 = 1.1sec), then log an error.
+  if n_bytes <= 0 then
     loops_since_data_received = loops_since_data_received + 1
-    if loops_since_data_received >= 6 then
+    if loops_since_data_received >= 11 then
       log_error(error_list[1])
-      gcs:send_text(0, "ERROR: PTH has failed to send data")
-      gcs:send_text(0, "Bytes received: " .. tostring(n_bytes))
+      gcs:send_text(0, "ERROR: Disconnected Sensor")
+      -- clear incomplete message (if there is one)
+      message_table = {}
     end
-      return update, 250
-  else
-    loops_since_data_received = 0
+    return update, 100
   end
 
-  -- If we are in the middle of recieving a message,
-  -- simply wait for the rest of the message to arrive
-  if (n_bytes > 0 and n_bytes < 60)  then
-    return update, 250
-  end
-
+  -- read bytes from the serial line until we hit '0x0A' which is <LF>, the
+  -- ending of the message. Then process the message
+  loops_since_data_received = 0
   while n_bytes > 0 do
-    if n_bytes >= 120 then
-      gcs:send_text(7, "Bytes available: " .. tostring(n_bytes))
-    end
-    -- only read a max of 60 bytes in a go
-    -- this limits memory consumption
-    local buffer = {} -- table to buffer data
-    local bytes_target = n_bytes - math.min(n_bytes, 60)
-    while n_bytes > bytes_target do
-      table.insert(buffer,PORT:read())
-      n_bytes = n_bytes - 1
-    end
-
-    local data = string.char(table.unpack(buffer))
-
-    -- check if checksum is valid
-    if (verify_checksum(data)) then
-      -- make sure that data is logged correctly
-      if not (parse_data(data)) then
-        log_error(error_list[3])
-        gcs:send_text(0, "ERROR: PTH data was not successfully parsed or not written to BIN file correctly!")
-        gcs:send_text(0, "Incoming string: " .. data .. string.format(" size: %d", #data))
+    local byte = PORT:read()
+    if byte == 0x0A then
+      table.insert(message_table, byte)
+      local message_string = string.char(table.unpack(message_table))
+      if not (verify_checksum(message_string)) then
+        log_error(error_list[2])
+        gcs:send_text(0, "ERROR: PTH Data failed checksum")
+        message_table = {}
+        return update, 100
       end
-    else
-      log_error(error_list[2])
-      gcs:send_text(0, "ERROR: PTH Data failed checksum, check sensor!")
-      gcs:send_text(0, "Incoming string: " .. data .. string.format(" size: %d", #data))
+      if not (parse_data(message_string)) then
+        log_error(error_list[3])
+        gcs:send_text(0, "ERROR: Failed to parse data")
+        message_table = {}
+        return update, 100
+      end
+      -- reset for the next message
+      message_table = {}
+      return update, 100
     end
+    table.insert(message_table, byte)
+    n_bytes = n_bytes - 1
   end
 
-  return update, 250 -- reschedules the loop every 250ms
+  return update, 100 -- schedule the update function to
 end
-
 
 return update() -- run immediately before starting to reschedule
