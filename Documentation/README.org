@@ -1,0 +1,96 @@
+#+title: Documentation Overview
+#+author: Justin Tussey
+#+options: toc:2
+
+* Table of Contents :toc:
+- [[#what-is-an-org-file][What is an =.org= file?]]
+- [[#creating-documentation-pdfs][Creating Documentation PDF's]]
+  - [[#with-org-mode-files][With Org Mode Files]]
+  - [[#with-markdown-files-or-other-formats][With Markdown Files or Other Formats]]
+
+* What is an =.org= file?
+Each piece of documentation is stored in an =.org= file. An =.org= file is a
+file that is written in the [[https://orgmode.org/][Org Mode]] markup syntax. Org mode is similar to
+[[https://en.wikipedia.org/wiki/Markdown][markdown]], as it is a file in plain text, that uses symbols to represent
+different text features, such as headings, code blocks, etc.
+
+I chose to write the documentation in Org files since GitHub supports a live
+preview of Org files, and converting Org files to a PDF is much easier.
+
+If you wish to edit the Org files, you can do so in any text editor (such as VS
+Code, Notepad, Notepad++, Sublime Text, Vim, Emacs, etc...). I would recommend
+using [[https://code.visualstudio.com/][VS Code]], with the [[https://github.com/vscode-org-mode/vscode-org-mode][VS Code Org Mode]] extension, as it requires little to no
+configuration (unlike Emacs, which Org Mode is designed for).
+
+If you would wish to not use org files in the future, and simply want to use
+markdown files (or some other format), use the file conversion program, [[https://pandoc.org/][Pandoc]].
+
+For example if you wanted to convert the org file into GitHub flavored markdown
+(the markdown variation that GitHub uses). You would use the following command.
+
+#+begin_src
+ pandoc -f org -t gfm <input-file>.org -o <output-file>.md
+#+end_src
+
+The above command specifies the "from" format, being an Org Mode file (org), and the
+"to" format, being GitHub Flavored Markdown (gfm). We then specify the input file,
+being the desired Org Mode file, and then we specify the output file name, being
+any file with the =.md= extension (or whatever file extension is appropriate for
+your "to" format).
+
+* Creating Documentation PDF's
+** With Org Mode Files
+If you modify the documentation in the future, and would like to generate the
+PDF's for use outside of GitHub, you will need a few things.
+
+First you will need a [[https://www.latex-project.org/][LaTeX]] installation. I recommend using the [[https://tug.org/texlive/][TeX Live]]
+distribution, since it is cross platform.  You will then need to install [[https://pandoc.org/][Pandoc]],
+a document conversion deck program, which we will use to create the PDF's.
+Finally you will need to install a LaTeX template, any template that supports
+code listings will work. I recommend using the [[https://github.com/Wandmalfarbe/pandoc-latex-template][Eisvogel]] template, specifically
+the [[https://github.com/jlacko/pandoc-latex-template][modfied version]] that adds highlights to hyperlinks.
+
+#+begin_quote
+*NOTE*: The Eisvogel template requires several LaTeX packages to create PDF's
+properly. You can install the specific packages, which are listed in the README
+on the GitHub, through TeX Live's [[https://tug.org/texlive/pkginstall.html][package manager]].
+#+end_quote
+
+Once you have install all of the above programs and a template, you can now
+convert the Org files to PDF's by using the following command.
+
+#+begin_src
+pandoc <input_file>.org -o <output-file>.pdf --template eisvogel --listings
+#+end_src
+
+The above Pandoc command specifies the input and output files, and then
+specifies the template we want to use when converting to a PDF. We also specify
+what we would like to use code listings, which gives us code blocks with syntax
+highlighting and line numbers.
+
+If you are on Linux or are using WSL (Windows Subsystem for Linux) you can use
+GNU Make to call commands in the makefile, so you do not have to repeatedly call
+them while editing the documentation.
+
+** With Markdown Files or Other Formats
+If you wish to use a different format to create the PDF's, or simply do not want
+to install all of the required programs and templates, you can convert the Org
+files to markdown or other formats with [[https://pandoc.org/][Pandoc]].
+
+For example if you wanted to convert the org file into GitHub flavored markdown
+(the markdown variation that GitHub uses). You would use the following command.
+
+#+begin_src
+ pandoc -f org -t gfm <input-file>.org -o <output-file>.md
+#+end_src
+
+The above command specifies the "from" format, being an Org Mode file (org), and the
+"to" format, being GitHub Flavored Markdown (gfm). We then specify the input file,
+being the desired Org Mode file, and then we specify the output file name, being
+any file with the =.md= extension (or whatever file extension is appropriate for
+your "to" format).
+
+Once you have converted the Org files to markdown, you can use any program or
+online website that supports markdown to PDF conversion. For example if you are
+using [[https://code.visualstudio.com/][VS Code]], you can use the [[https://marketplace.visualstudio.com/items?itemName=yzane.markdown-pdf][Markdown PDF]] extension to create the PDF's from
+markdown files from withing VS Code.
