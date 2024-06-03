@@ -450,7 +450,7 @@ we will store each of the messages sections for processing.
 
 Next we perform another regex on the message body. Here the regex
 "~([^" ..",".. "]+)~", or more simply written as "~([^,]+)~" takes the string,
-and matches every character up until it finds a '=,='. It does this for all
+and matches every character up until it finds a ",". It does this for all
 of the segments in the string. We then use the for loop to iterate over all of
 these segments and place them into are previously defined ~data_table~.
 
