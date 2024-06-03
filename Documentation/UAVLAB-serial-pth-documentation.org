@@ -132,8 +132,9 @@ Since we run the loop ten times per second we keep track of how many loops have
 gone by with the ~loops_since_data_received~ counter. If we reach eleven or more
 iterations without new data, we log an error with the ~log_error()~ function
 (This will be discussed further in the [[#logging]["Logging"]] section), send an error out to
-the Mission Planner output and clear the current message that has been parsed in
-the event that the sensor was disconnected in the middle of a data transmission.
+the Mission Planner output, and clear the current message that has been parsed
+in the event that the sensor was disconnected in the middle of a data
+transmission.
 
 We derive this number of failed loops from how often we schedule the ~update()~
 function to run, which is every 100 milliseconds, and how often the PTH sends
@@ -163,10 +164,10 @@ prevent us from logging any false errors.
 
 If there are any bytes available, we read one off of the serial line. We first
 check if it is the ASCII character =0x0A=, which is the 'line feed' or =<LF>=
-character. Which is that character that the Samamet uses to signify the end of a
-message. If it is not this character, we simply add the byte to ~message_table~
-and repeat the loop again if there are any more bytes in the queue.
-
+character, which is that character that the Samamet uses to signify the end of a
+message. If the current bytes is not the line feed character, we simply add the
+byte to ~message_table~ and repeat the loop again if there are any more bytes in
+the queue.
 
 #+begin_src lua
     if byte == 0x0A then
@@ -278,7 +279,7 @@ table for the next message and continue to reschedule the ~update()~ function to
 read the next message.
 
 #+begin_src lua
-  return update, 250 -- reschedules the loop every 250ms
+  return update, 100 -- reschedules the loop every 100ms
 #+end_src
 
 Here we schedule the update function to return every 100 milliseconds. We
@@ -390,7 +391,7 @@ For information on Lua's regular expressions, you can view these pages:
 - [[https://www.lua.org/pil/20.1.html][Pattern-Matching Functions]]
 - [[https://riptutorial.com/lua/example/20315/lua-pattern-matching][Lua pattern matching]]
 
-For making patters and regular expressions in Lua, you can use these web tools:
+For making patterns and regular expressions in Lua, you can use these web tools:
 - [[https://gitspartv.github.io/lua-patterns/][Lua Patterns Viewer]]
 - [[https://montymahato.github.io/lua-pattern-tester/][Lua Pattern Tester]]
 
@@ -449,7 +450,7 @@ we will store each of the messages sections for processing.
 
 Next we perform another regex on the message body. Here the regex
 "~([^" ..",".. "]+)~", or more simply written as "~([^,]+)~" takes the string,
-and matches every character up until it finds a "~,~". It does this for all
+and matches every character up until it finds a "=,=". It does this for all
 of the segments in the string. We then use the for loop to iterate over all of
 these segments and place them into are previously defined ~data_table~.
 
@@ -471,7 +472,7 @@ For information on Lua's regular expressions, you can view these pages:
 - [[https://www.lua.org/pil/20.1.html][Pattern-Matching Functions]]
 - [[https://riptutorial.com/lua/example/20315/lua-pattern-matching][Lua pattern matching]]
 
-For making patters and regular expressions in Lua, you can use these web tools:
+For making patterns and regular expressions in Lua, you can use these web tools:
 - [[https://gitspartv.github.io/lua-patterns/][Lua Patterns Viewer]]
 - [[https://montymahato.github.io/lua-pattern-tester/][Lua Pattern Tester]]
 
@@ -511,15 +512,15 @@ If the table passes this check, we then write the data to the BIN file.
 The ~logger:write~ method take several arguments to define the various
 parameters that go into the log file.
 
-The first argument, ~'SAMA'~, is the section name for the data we are going to
+The first argument, '=SAMA=', is the section name for the data we are going to
 log in the file. This name has to be at most 4 characters, and cannot be the
 same as any other section name that ArduPilot logs. The second argument,
-~'pres,temp1,temp2,hum,temp3,error'~, specifies the name of each piece of data
+'=pres,temp1,temp2,hum,temp3,error=', specifies the name of each piece of data
 logged.  These labels are stored under the section name in the log file, in
 total these names cannot exceed 64 characters.
 
-The third argument, ~'NNNNNN'~, specifies the type of each label. In this case
-'=N=', specifies a ~char[16]~, which is a string of a maximum of 16 characters.
+The third argument, '=NNNNNN=', specifies the type of each label. In this case
+'=N=', specifies a =char[16]=, which is a string of a maximum of 16 characters.
 The fourth and fifth arguments specify the units and the multiplier of each of
 the units respectively. In the fourth argument '=P=' represents Pascals, for the
 pressure measurement, '=O=' represents degrees Celsius, for the temperature
@@ -532,7 +533,7 @@ found [[https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Logger/R
 
 Once we specify the parameters for the data that is going to be logged, we then
 pass in the data we would like to log in the file. In this case, we use the 5
-elements in the ~measurements_table~ table, and the string ~"Normal"~ for the
+elements in the ~measurements_table~ table, and the string "=Normal=" for the
 error column. These are in the same order as the labels we specified in the
 second argument.
 
@@ -559,7 +560,7 @@ end
 The ~log_errors()~ is very similar to the ~log_data()~ function, the only
 difference is that instead of writing any specific data, we simply write zeros
 to the log file, and log the type of error as a string (which will originate
-from the ~error_list~ table). We do this as it is very obvious in the log file
+from the ~ERROR_LIST~ table). We do this as it is very obvious in the log file
 when there is an error, and we deal with it easily during post processing.
 
 For an explanation of the arguments, in ~logger:write()~, you can look in the
@@ -583,7 +584,7 @@ for long and important flights.
 #+latex: \newpage
 * Important Links
 Below is a list of the URLs linked to in the document in case that the
-hyperlinks are not useable or reachable, such as if the document is printed on
+hyperlinks are not usable or reachable, such as if the document is printed on
 paper.
 
 1. ArduPilot Serial Dump Example
