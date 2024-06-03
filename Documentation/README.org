@@ -45,10 +45,10 @@ PDF's for use outside of GitHub, you will need a few things.
 
 First you will need a [[https://www.latex-project.org/][LaTeX]] installation. I recommend using the [[https://tug.org/texlive/][TeX Live]]
 distribution, since it is cross platform.  You will then need to install [[https://pandoc.org/][Pandoc]],
-a document conversion deck program, which we will use to create the PDF's.
-Finally you will need to install a LaTeX template, any template that supports
-code listings will work. I recommend using the [[https://github.com/Wandmalfarbe/pandoc-latex-template][Eisvogel]] template, specifically
-the [[https://github.com/jlacko/pandoc-latex-template][modfied version]] that adds highlights to hyperlinks.
+a document conversion program, which we will use to create the PDF's.  Finally
+you will need to install a LaTeX template, any template that supports code
+listings will work. I recommend using the [[https://github.com/Wandmalfarbe/pandoc-latex-template][Eisvogel]] template, specifically the
+[[https://github.com/jlacko/pandoc-latex-template][modfied version]] that adds highlights to hyperlinks.
 
 #+begin_quote
 *NOTE*: The Eisvogel template requires several LaTeX packages to create PDF's
@@ -65,7 +65,7 @@ pandoc <input_file>.org -o <output-file>.pdf --template eisvogel --listings
 
 The above Pandoc command specifies the input and output files, and then
 specifies the template we want to use when converting to a PDF. We also specify
-what we would like to use code listings, which gives us code blocks with syntax
+that we would like to use code listings, which gives us code blocks with syntax
 highlighting and line numbers.
 
 If you are on Linux or are using WSL (Windows Subsystem for Linux) you can use
