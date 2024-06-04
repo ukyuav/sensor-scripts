@@ -93,4 +93,4 @@ your "to" format).
 Once you have converted the Org files to markdown, you can use any program or
 online website that supports markdown to PDF conversion. For example if you are
 using [[https://code.visualstudio.com/][VS Code]], you can use the [[https://marketplace.visualstudio.com/items?itemName=yzane.markdown-pdf][Markdown PDF]] extension to create the PDF's from
-markdown files from withing VS Code.
+markdown files from within VS Code.
