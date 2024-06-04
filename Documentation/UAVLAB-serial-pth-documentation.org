@@ -603,5 +603,9 @@ paper.
    + https://gitspartv.github.io/lua-patterns/
 8. Lua Pattern Tester
    + https://montymahato.github.io/lua-pattern-tester/
+9.  Supported log file data types
+   + https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Logger/README.md
+10. ~logger:write()~ method documentation
+    + https://ardupilot.org/dev/docs/code-overview-adding-a-new-log-message.html
 
 #  LocalWords:  ArduPilot Lua regexes Samamet
