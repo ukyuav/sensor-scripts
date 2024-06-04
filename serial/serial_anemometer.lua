@@ -6,14 +6,16 @@ data we need, and log it to the autopilot.
 
 Uses CV7-OEM Ultrasonic Wind Sensor from LCJ Capteurs
 
+Sends Data every 512 milliseconds, Baud rate of 4800
+
 Author: Justin Tussey
-Last Updated: 2024-05-20
+Last Updated: 2024-06-04
 ]]--
 
--- Sends Data every 512 milliseconds, Baud rate of 4800
-
--- variable to count iterations without getting message
-local loops_since_data_received = 0
+-- Return rate
+local SCHEDULE_RATE = 100 --milliseconds
+local TIME_BETWEEN_DATA = 512 --milliseconds
+local LOOPS_TO_FAIL = (TIME_BETWEEN_DATA / SCHEDULE_RATE) + (1) -- number of how many loops we need for us to properly flag that the sensor is not sending data
 
 -- error type table
 local ERROR_LIST = {
@@ -33,8 +35,11 @@ local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port"
 PORT:begin(BAUD_RATE)
 PORT:set_flow_control(0)
 
+-- variable to count iterations without getting message
+local loops_since_data_received = 0
 
-local message_table = {}
+-- table to hold the incoming message that we are assembling
+local incoming_message = {}
 
 
 function verify_checksum(message_string)
@@ -152,42 +157,45 @@ function update()
 
   if n_bytes <= 0 then
     loops_since_data_received = loops_since_data_received + 1
-    if loops_since_data_received > 11 then
+    if loops_since_data_received > LOOPS_TO_FAIL then
       log_error(ERROR_LIST[1])
       gcs:send_text(0, "ERROR: Disconnected Sensor")
       -- clear incomplete message (if there is one)
-      message_table = {}
+      incoming_message = {}
     end
-    return update, 100
+    return update, SCHEDULE_RATE
   end
 
   loops_since_data_received = 0
   while n_bytes > 0 do
     local byte = PORT:read()
     if byte == 0x0A then
-      table.insert(message_table, byte)
-      local message_string = string.char(table.unpack(message_table))
+      table.insert(incoming_message, byte)
+      local message_string = string.char(table.unpack(incoming_message))
+
       if not (verify_checksum(message_string)) then
         log_error(ERROR_LIST[2])
-        gcs:send_text(0, "ERROR: PTH Data failed checksum")
-        message_table = {}
-        return update, 100
+        gcs:send_text(0, "ERROR: Data failed checksum")
+        incoming_message = {}
+        return update, SCHEDULE_RATE
       end
+
       if not (parse_data(message_string)) then
         log_error(ERROR_LIST[3])
         gcs:send_text(0, "ERROR: Failed to parse data")
-        message_table = {}
-        return update, 100
+        incoming_message = {}
+        return update, SCHEDULE_RATE
       end
+
       gcs:send_text(7, message_string)
       -- reset for the next message
-      message_table = {}
-      return update, 100
+      incoming_message = {}
+      return update, SCHEDULE_RATE
     end
-    table.insert(message_table, byte)
+    table.insert(incoming_message, byte)
     n_bytes = n_bytes - 1
   end
-  return update, 100 -- schedule the update function to
+  return update, SCHEDULE_RATE -- schedule the update function to
 end
 
 return update()
