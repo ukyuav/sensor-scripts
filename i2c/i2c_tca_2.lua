@@ -1,31 +1,36 @@
 --[[
 
-I2C TCA9548 interface
+I2C 5 Hole Probe w/ TCA9548 Multiplexer interface
 
-This program uses the TCA Multiplexer to communicate to multiple I2C devices
-with the same addresses
+This script uses an I2C multiplexer to communicate to multiple I2C pressure
+sensors with the same addresses to record pressure data from a 5 hole pitot tube
+probe onto the drone's autopilot for turbulence data collection
 
 Author: Ryan Prince | Last Updated By: Justin Tussey
-Last Updated: 2024-06-04
+Last Updated: 2024-06-10
 
 ]] --
 
+-- Global Constants --
+
 -- init i2c bus
+-- Get interface at bus 0 (first I2C bus) and set device address to 0x0
 local I2C_BUS = i2c:get_device(0, 0)
 
--- make sure that get_device does not that return nil
+-- make sure that get_device does not return nil
 if (I2C_BUS == nil) then
   gcs:send_text(0, "Cannot find I2C bus")
   return
 end
 
+-- set the number of retries to 10
 I2C_BUS:set_retries(10)
 gcs:send_text(7, "i2c_tca Script Started!")
 
--- var for address of the sensors
+-- shared address of the sensors
 local SENSOR_ADDR = 0x28
 
--- table of which channels on the multiplexer are connected
+-- table of which channels on the multiplexer are being used
 local CHANNEL_NUMBERS = {
   0,
   1,
@@ -34,9 +39,11 @@ local CHANNEL_NUMBERS = {
   4
 }
 
--- for each TCA9548A, add an entry with its address
--- 0x70 is default, to add more set or reset A0, A1, A2
+-- 0x70 is default, to change, set or reset A0, A1, A2 on the multiplexer
 local TCA_ADDRESS = 0x70
+
+
+-- Global Variables --
 
 -- list for the log data from the sensors
 local log_data_list = {}
@@ -44,7 +51,19 @@ local log_data_list = {}
 -- list for errors when reading channels of multiplexer
 local error_list = {}
 
--- opens the channel to the designated TCA module
+
+-- dynamically create the message that gets reported to mission planner
+-- prevents us from having to manually change the message form every time we add
+-- or remove sensors or decide to change the format of the message
+local function form_message()
+  local message = ""
+  for key, value in pairs(CHANNEL_NUMBERS) do
+    message = message .. string.format(key) .. string.format(": %.2f ", log_data_list[key])
+  end
+  return message
+end
+
+-- set the current channel on the TCA
 local function tcaselect(channel)
   -- set multiplexer address
   I2C_BUS:set_address(TCA_ADDRESS)
@@ -55,7 +74,6 @@ local function tcaselect(channel)
   end
 
   -- set/open the correct channel
-  -- i2c_bus:write_register(0x70, 1 << channel)
   return (I2C_BUS:write_register(TCA_ADDRESS, 1 << channel))
 end
 
@@ -80,6 +98,7 @@ end
 
 -- MAIN FUNCTION
 function update()
+  -- go through each channel, and collect the data from the sensor
   for key, value in pairs(CHANNEL_NUMBERS) do
 
     -- select channel i on TCA
@@ -105,6 +124,7 @@ function update()
         -- normalize data to [-2 2] in inH2O and make the datatype string
         -- math is ((range*data)/max(data) - 2)
         local normalized_data = tostring((4.0 * msg) / 0x3FFF - 2)
+        -- add the data to the list
         log_data_list[key] = normalized_data
         error_list[key] = "NORMAL"
       end
@@ -113,17 +133,25 @@ function update()
 
   log_data()
 
-  -- send_text(priority level (7 is Debug), text as a string formatted to float)
-  -- report data to mission planner output
-  gcs:send_text(7, "tube1 " .. string.format(": %.2f | ", log_data_list[1]) ..
-                   "tube2 " .. string.format(": %.2f | ", log_data_list[2]) ..
-                   "tube3 " .. string.format(": %.2f | ", log_data_list[3]) ..
-                   "tube4 " .. string.format(": %.2f | ", log_data_list[4]) ..
-                   "tube5 " .. string.format(": %.2f", log_data_list[5])
-  )
 
+  -- send_text(priority level (7 is Debug), text is formed dynamically from the function)
+  gcs:send_text(7, form_message())
+
+  -- report data to mission planner output
+  -- gcs:send_text(7, "1 " .. string.format(": %.2f | ", log_data_list[1]) ..
+  --                  "2 " .. string.format(": %.2f | ", log_data_list[2]) ..
+  --                  "3 " .. string.format(": %.2f | ", log_data_list[3]) ..
+  --                  "4 " .. string.format(": %.2f | ", log_data_list[4]) ..
+  --                  "5 " .. string.format(": %.2f", log_data_list[5])
+  -- )
+
+
+  -- reset everything for the next loop
   I2C_BUS:set_address(0x00)
+  log_data_list = {}
+  error_list = {}
   return update, 50 -- reschedules the loop every 50ms (20hz)
 end
 
 return update() -- run immediately before starting to reschedule
+
