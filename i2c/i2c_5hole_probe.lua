@@ -17,11 +17,11 @@ Last Updated: 2024-06-10
 -- Get interface at bus 0 (first I2C bus) and set device address to 0x0
 local I2C_BUS = i2c:get_device(0, 0)
 
--- make sure that get_device does not return nil
-if (I2C_BUS == nil) then
-  gcs:send_text(0, "Cannot find I2C bus")
-  return
-end
+-- -- make sure that get_device does not return nil
+-- if (I2C_BUS == nil) then
+--   gcs:send_text(0, "Cannot find I2C bus")
+--   return
+-- end
 
 -- set the number of retries to 10
 I2C_BUS:set_retries(10)
@@ -37,6 +37,12 @@ local CHANNEL_NUMBERS = {
   2,
   3,
   4
+}
+
+-- error type table
+local ERROR_LIST = {
+  "Sensor Disconnected (sensor fail)",          -- 1
+  "Failed to switch channel (multiplexer fail)" -- 2
 }
 
 -- 0x70 is default, to change, set or reset A0, A1, A2 on the multiplexer
@@ -91,9 +97,9 @@ local function log_data()
 end
 
 -- write an error to the channel that is experience an error
-local function log_channel_error(channel_index)
+local function log_channel_error(channel_index, error_type)
   log_data_list[channel_index] = "0"
-  error_list[channel_index] = "ERROR"
+  error_list[channel_index] = error_type
 end
 
 -- MAIN FUNCTION
@@ -104,7 +110,7 @@ function update()
     -- select channel i on TCA
     if not (tcaselect(value)) then
       gcs:send_text(0, "Error when selecting tube " .. tostring(key))
-      log_channel_error(key)
+      log_channel_error(key, ERROR_LIST[1])
     else
       -- open the address of the sensor
       I2C_BUS:set_address(SENSOR_ADDR)
@@ -115,7 +121,7 @@ function update()
       -- if there is no i2c device connected (or no data is read in general) log it as an error
       if (returnTable == nil) then
         gcs:send_text(0, "sensor disconnected, " .. " tube: " .. tostring(key))
-        log_channel_error(key)
+        log_channel_error(key, ERROR_LIST[2])
       else
 
         -- format data to remove first 2 bits
