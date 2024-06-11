@@ -1,6 +1,6 @@
 #+title:  I^{2}C  Pressure Transducers with a TCA9548 Multiplexer
 #+author: Justin Tussey
-#+date: 2024-05-22
+#+date: 2024-06-11
 #+options: toc:2
 
 #+begin_comment
@@ -13,11 +13,63 @@ https://github.com/Wandmalfarbe/pandoc-latex-template <- main link
 
 
 * Table of Contents :toc:
+- [[#error-messages-overview][Error Messages Overview]]
+  - [[#quick-reference-table][Quick Reference Table]]
+  - [[#explination][Explination]]
 - [[#code-overview][Code Overview]]
   - [[#global-values-and-initialization][Global Values and Initialization]]
   - [[#tca-channel-selecting][TCA Channel Selecting]]
   - [[#logging][Logging]]
   - [[#update][Update]]
+
+* Error Messages Overview
+
+** Quick Reference Table
+| Mission Planner Output       | Log File                                    | Error Type                       |
+|------------------------------+---------------------------------------------+----------------------------------|
+| sensor disconnected, tube: # | Sensor Disconnected (sensor fail)           | Sensor failure/disconnected      |
+| Error when selecting tube #  | Failed to switch channel (multiplexer fail) | Multiplexer failure/disconnected |
+
+** Explination
+When using the script, if there is an error with the sensor array, you will see
+an error message in the Mission Planner output, and in the error column in the
+data from the sensor in the BIN file.
+
+There are two main errors you will see, a sensor failure error, and a
+multiplexer failure error.
+
+A sensor failure is when one, or more of the pressure sensors is not responding.
+This could mean that they are disconnected from the multiplexer, or there could
+be an issue with that specific channel on the multiplexer.
+
+If there is a sensor error, you would see a message similar to the one below
+in Mission Planner.
+
+#+begin_example
+6/11/2024 11:02:42 AM : sensor disconnected, tube: 2
+#+end_example
+
+In the log file you would see the message ~"Sensor Disconnected (sensor fail)"~.
+
+A multiplexer failure is when the script cannot communicate with the multiplexer
+to switch the selected channel. This usually means the multiplexer is either
+disconnected or simply not working.
+
+If there is a multiplexer error, you would see a similar message in Mission
+Planner.
+
+#+begin_example
+6/11/2024 11:02:42 AM : Error when selecting tube 2
+#+end_example
+
+It is important to note that this error can also occur when channel number that
+is passed into the function is not within the valid range of channels on the
+multiplexer. So if you experience this error and have modified the script, make
+sure that the channel number you are passing in is a valid channel.
+
+In the log file, if you are having a multiplexer failure, you will see the
+message ~"Failed to switch channel (multiplexer fail)"~ in the error column of the
+specific channel
 
 * Code Overview
 ** Global Values and Initialization
@@ -40,8 +92,11 @@ connected, which normally will be 5.
 
 #+begin_src lua
 -- init i2c bus
-local i2c_bus = i2c:get_device(0, 0)
-i2c_bus:set_retries(10)
+-- Get interface at bus 0 (first I2C bus) and set device address to 0x0
+local I2C_BUS = i2c:get_device(0, 0)
+
+-- set the number of retries to 10
+I2C_BUS:set_retries(10)
 gcs:send_text(7, "i2c_tca Script Started!")
 #+end_src
 
@@ -53,15 +108,20 @@ Once we get a connection to the I^{2}C bus, we then send a debug message to
 Mission Planner.
 
 #+begin_src lua
--- var for address of the sensors
+-- shared address of the sensors
 local SENSOR_ADDR = 0x28
 
--- var for list of which channels on the multiplexer are connected
+-- 0x70 is default, to change, set or reset A0, A1, A2 on the multiplexer
+local TCA_ADDRESS = 0x70
+
+-- table of which channels on the multiplexer are being used
 local CHANNEL_NUMBERS = {#, #, #, #, #}
 
--- for each TCA9548A, add an entry with its address
--- 0x70 is default, to add more set or reset A0, A1, A2
-TCA_ADDRESSES = {0x70}
+-- error type table
+local ERROR_LIST = {
+  "Sensor Disconnected (sensor fail)",          -- 1
+  "Failed to switch channel (multiplexer fail)" -- 2
+}
 #+end_src
 
 We store the shared sensor address in the ~SENSOR_ADDR~, this prevent us from
@@ -69,28 +129,27 @@ having to use a unnamed constant when referring to the sensors address later in
 the script. This also reduces the amount of changes needed to change to a
 different sensor with a different address.
 
+The ~TCA_ADDRESSES~ variable stores the address of the multiplexer (TCA). Again,
+this prevents us from having to refer to the multiplexer's address with an
+unnamed constant
+
 The ~CHANNEL_NUMBERS~ table stores the channels on the multiplexer that we want
 to read data from. These can range from 0-7, corresponding to the channels on
 the multiplexer. These can be set in any order if one wishes to have specific
 sensors log to specific columns in the BIN files. In the code snippet above, the
 channel numbers are replaces with "=#=" as a placeholder.
 
-The ~TCA_ADDRESSES~ table stores the address of the mulitplexer (TCA). Currently
-this has only one TCA address, as we only plan to connect one mulitplexer to
-each autopilot. You can add more addresses to the table, and read data from
-multiple multiplexers (along with minor modification to the script).
+The ~ERROR_LIST~ table hold the errors that can occur. This is mainly used when
+calling the ~log_channel_error()~ function to specify the type of error message
+we would like to log to the log file.
+
 
 ** TCA Channel Selecting
 #+begin_src lua
--- opens the channel to the designated TCA module
-function tcaselect(tca, channel)
-  -- verify that tca index passed through is valid
-  if (tca > #TCA_ADDRESSES) or (tca < 0) then
-    return false
-  end
-
-  -- choose multiplexer from array
-  i2c_bus:set_address(TCA_ADDRESSES[tca])
+-- set the current channel on the TCA
+local function tcaselect(channel)
+  -- set multiplexer address
+  I2C_BUS:set_address(TCA_ADDRESS)
 
   -- make sure channel value passed through is between 0-7
   if (channel > 7) or (channel < 0) then
@@ -98,9 +157,7 @@ function tcaselect(tca, channel)
   end
 
   -- set/open the correct channel
-  -- i2c_bus:write_register(0x70, 1 << channel)
-  i2c_bus:write_register(TCA_ADDRESSES[tca], 1 << channel)
-  return true
+  return (I2C_BUS:write_register(TCA_ADDRESS, 1 << channel))
 end
 #+end_src
 
@@ -108,9 +165,7 @@ The ~tcaselect()~ function is responsible for telling the multiplexer what
 channel it should be listening to.
 
 We start by setting what I^{2}C device address we are going to read and write
-from to the address of the multiplexer. We first check that the TCA index then
-we set the address, if it is not a valid address, we return false for the caller
-to handle.
+from to the address of the multiplexer.
 
 After that we check the channel number that was passed in and make sure it is
 withing the range of channels on the multiplexer, which is 0-7, if not we return
@@ -123,6 +178,7 @@ bitwise left shifted by the number of the channel we select.
 By left shifting the number one by the channel number, we send a binary number
 with only one bit set to one. The position of that bit specifies which channel
 we would like to listen to.
+
 
 #+begin_example
          7654 3210
@@ -138,13 +194,14 @@ we would like to listen to.
 
 Above we can see a chart of what each operation looks like to select each channel.
 
-Once we select the channel on the TCA, we then return true for the caller to handle.
+We then take the return value of ~write_register()~, which is a boolean, and return
+it for the caller to handle.
 
 ** Logging
 *** Logging Data To Bin
 #+begin_src lua
-function log_data()
-  logger:write('SENS','s1,s2,s3,s4,s5,err1,err2,err3,err4,err5','NNNNNNNNNN',
+local function log_data()
+  logger:write('PRBE','tube1,tube2,tube3,tube4,tube5,err1,err2,err3,err4,err5','NNNNNNNNNN',
                log_data_list[1],
                log_data_list[2],
                log_data_list[3],
@@ -155,6 +212,7 @@ function log_data()
                error_list[3],
                error_list[4],
                error_list[5])
+end
 #+end_src
 
 This function takes the data that takes the date we have collected from the
@@ -164,31 +222,37 @@ and logs it to the BIN file of the autopilot.
 The ~logger:write()~ method take several arguments to define the various
 parameters that go into the log file.
 
-The first argument, ~'SENS'~, is the section name for the data we are going to
+The first argument, ~'PRBE'~, is the section name for the data we are going to
 log in the file. This name has to be at most 4 characters, and cannot be the
 same as any other section name that ArduPilot logs. The second argument,
-~'s1,s2,s3,s4,s5,err1,err2,err3,err4,err5'~, specifies the name of each piece of
-data logged.  These labels are stored under the section name in the log file, in
-total these names cannot exceed 64 characters.
+~'tube1,tube2,tube3,tube4,tube5,err1,err2,err3,err4,err5'~, specifies the name
+of each piece of data logged.  These labels are stored under the section name in
+the log file, in total these names cannot exceed 64 characters.
 
-Here we have to major sections of data, the actual data collected and processed
-by the sensor, and if there were any errors collecting the data from that
-channel on the multiplexer. The pressure data is the data that is reported from
-the sensor, and is normalized to [-2, 2] in H_{2}O. The errors simply log
-"=NORMAL=" or "=ERROR=" depending on the state of the channel at the time the
-data is recording.
+The third argument, '=NNNNNNNNNN=', specifies the type of each label. In this
+case '=N=', specifies a =char[16]=, which is a string of a maximum of 16
+characters.
+
+Once we specify the parameters for the data that is going to be logged, we then
+pass in the data we would like to log in the file. In this case, we use the 5
+elements in the ~log_data_list~ table for the channel data, and the 5 elements
+in ~error_list~ for the errors for each channel. The pressure data is the data
+that is reported from the sensor, and is normalized to [-2, 2] in H_{2}O. The
+errors simply log "=NORMAL=" or "=ERROR=" depending on the state of the channel
+at the time the data is recording.
 
 *** Logging Errors
 #+begin_src lua
-function log_channel_error(channel_index)
+-- write an error to the channel that is experience an error
+local function log_channel_error(channel_index, error_type)
   log_data_list[channel_index] = "0"
-  error_list[channel_index] = "ERROR"
+  error_list[channel_index] = error_type
 end
 #+end_src
 
 This function logs an error for the channel index that is specified. It simply
-sets the data value to zero and places the word "=ERROR=" into the error list to
-be logged.
+sets the data value to zero and places the ~error_type~ string, which should be
+from the ~ERROR_LIST~ table into the error list to be logged.
 
 This function is called whenever there is an issue with specific channel on the
 multiplexer, primarily if there is a connection issue where no data is read from
@@ -199,30 +263,31 @@ the sensor.
 function update()
   for key, value in pairs(CHANNEL_NUMBERS) do
 
-    -- select TCA module 1, and channel i
-    if not (tcaselect(1, value)) then
-      gcs:send_text(0, "Called TCA channel " .. tostring(value) .. ", which does not exist")
+    -- select channel i on TCA
+    if not (tcaselect(value)) then
+      gcs:send_text(0, "Error when selecting tube " .. tostring(key))
       log_channel_error(key)
+    else
 #+end_src
 
 For the main loop in the script, we start by iterating through the list of
 channels in ~CHANNEL_NUMBERS~. We tell the TCA to switch to channel =i= with the
 ~tcaselect()~ function. If ~tcaselect()~ returns false meaning we called a
-channel that does not exist on the multiplexer, we then send an error message to
-the Mission Planner output, specifying which channel is invalid, and call the
-~log_channel_error()~ function. We then skip the rest of the loop and start on
-the next iteration
+channel that does not exist on the multiplexer, or that we failed to switch the
+channel on the multiplexer, we then send an error message to the Mission Planner
+output, specifying which channel is invalid, and call the ~log_channel_error()~
+function. We then skip the rest of the loop and start on the next iteration
 
 #+begin_src lua
-    else
-      -- once open use the address of the sensor
-      i2c_bus:set_address(SENSOR_ADDR)
+      -- open the address of the sensor
+      I2C_BUS:set_address(SENSOR_ADDR)
+
       -- read_registers(begin at register, number of bytes to read)
-      returnTable = i2c_bus:read_registers(0, 2)
+      local returnTable = I2C_BUS:read_registers(0, 2)
 
       -- if there is no i2c device connected (or no data is read in general) log it as an error
       if (returnTable == nil) then
-        gcs:send_text(0, "returnTable val nil," .. " disconn sensor," .. " channel: " .. string.format("%d", value))
+        gcs:send_text(0, "sensor disconnected, " .. " tube: " .. tostring(key))
         log_channel_error(key)
 #+end_src
 
@@ -232,10 +297,8 @@ since ~tcaselect()~ sets that to the TCA's address to select the channel.
 
 We then read two bytes from the I^{2}C bus with the ~read_registers()~ method.
 
-#+begin_quote
 The two arguments in ~read_registers()~ define the offset (in our case =0=), and
 how many bytes we would like to read (which is =2= in our case).
-#+end_quote
 
 ~read_registers()~ returns a table with the bytes we read from the I^{2}C bus.
 We store this table in the ~returnTable~ variable.
@@ -251,13 +314,13 @@ the loop and start on the next iteration.
 
 #+begin_src lua
       else
-        -- output data to MP Messages
         -- format data to remove first 2 bits
-        msg = (returnTable[1] << 8 | returnTable[2]) & 0x3FFF
+        local msg = (returnTable[1] << 8 | returnTable[2]) & 0x3FFF
 
         -- normalize data to [-2 2] in inH2O and make the datatype string
         -- math is ((range*data)/max(data) - 2)
-        normalized_data = tostring((4.0 * msg) / 0x3FFF - 2)
+        local normalized_data = tostring((4.0 * msg) / 0x3FFF - 2)
+        -- add the data to the list
         log_data_list[key] = normalized_data
         error_list[key] = "NORMAL"
       end
@@ -339,17 +402,14 @@ snippet.
 
 #+begin_src lua
   log_data()
-  -- send_text(priority level (7 is Debug), text as a string formatted to float)
-  -- report data to misson planner output
-  gcs:send_text(7, "chan " .. string.format("%d: %.3f | ", CHANNEL_NUMBERS[1], log_data_list[1]) ..
-                   "chan " .. string.format("%d: %.3f | ", CHANNEL_NUMBERS[2], log_data_list[2]) ..
-                   "chan " .. string.format("%d: %.3f | ", CHANNEL_NUMBERS[3], log_data_list[3]) ..
-                   "chan " .. string.format("%d: %.3f | ", CHANNEL_NUMBERS[4], log_data_list[4]) ..
-                   "chan " .. string.format("%d: %.3f ", CHANNEL_NUMBERS[5], log_data_list[5])
 
-  )
+  -- send_text(priority level (7 is Debug), text is formed dynamically from the function)
+  gcs:send_text(7, form_message())
 
-  i2c_bus:set_address(0x00)
+  -- reset everything for the next loop
+  I2C_BUS:set_address(0x00)
+  log_data_list = {}
+  error_list = {}
   return update, 50 -- reschedules the loop every 50ms (20hz)
 end
 #+end_src
@@ -357,6 +417,26 @@ end
 First we call the ~log_data()~ function, which takes the data we have placed
 into the ~log_data_list~ and ~error_list~ tables and logs their data to the BIN
 file.
+
+Then we can send the data we have collected to the Mission Planner output. This
+is optional but is helpful to verify the sensors are sending logical data. The
+message that we send to Mission Planner comes from the ~form_message()~ function.
+
+#+begin_src lua
+-- dynamically create the message that gets reported to mission planner
+-- prevents us from having to manually change the message form every time we add
+-- or remove sensors or decide to change the format of the message
+local function form_message()
+  local message = ""
+  for key, value in pairs(CHANNEL_NUMBERS) do
+    message = message .. string.format(key) .. string.format(": %.2f ", log_data_list[key])
+  end
+  return message
+end
+#+end_src
+
+Here we
+
 
 Then we can send the data we have collected to the Mission Planner output. This
 is optional but is helpful to verify the sensors are sending logical data. The
