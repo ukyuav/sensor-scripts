@@ -5,7 +5,7 @@ Read the data from the serial line that the PTH is connected to, then decode the
 messages from it, and log the data to the autopilots BIN file.
 
 Author: Justin Tussey
-Last Updated: 2024-05-24
+Last Updated: 2024-06-12
 ]] --
 
 -- variable to count iterations without getting message
@@ -113,11 +113,11 @@ function parse_data(message_string)
   end
 
 -- report data to Mission Planner, not necessary all the time
-  gcs:send_text(7, "pres:" .. string.format(" %.2f \r\n", measurements_table[1]) ..
-                   "temp1:" .. string.format(" %.2f \r\n", measurements_table[2]) ..
-                   "temp2:" .. string.format(" %.2f \r\n", measurements_table[3]) ..
-                   "hum:" .. string.format(" %.2f \r\n", measurements_table[4]) ..
-                   "temp3:" .. string.format(" %.2f", measurements_table[5])
+  gcs:send_text(7, "p:"  .. string.format(" %.1f  ", measurements_table[1])  ..
+                   "t1:" .. string.format(" %.1f  ", measurements_table[2])  ..
+                   "t2:" .. string.format(" %.1f  ", measurements_table[3])  ..
+                   "h:"  .. string.format(" %.1f  ", measurements_table[4])  ..
+                   "t3:" .. string.format(" %.1f", measurements_table[5])
   )
 
   -- return whether data input data matched needed format (table with 5
