@@ -1,6 +1,6 @@
 #+title: UAVLAB Serial PTH (Samamet) Script Documentation
 #+author: Justin Tussey
-#+date: 2024-05-22
+#+date: 2024-06-12
 #+options: toc:2
 
 #+begin_comment
@@ -12,6 +12,10 @@ https://github.com/Wandmalfarbe/pandoc-latex-template <- main link
 #+end_comment
 
 * Table of Contents :toc:
+- [[#hardware-setup][Hardware Setup]]
+- [[#error-messages-overview][Error Messages Overview]]
+  - [[#quick-reference-table][Quick Reference Table]]
+  - [[#explanation][Explanation]]
 - [[#code-overview][Code Overview]]
   - [[#global-variables][Global Variables]]
   - [[#serial-initialization][Serial Initialization]]
@@ -21,6 +25,94 @@ https://github.com/Wandmalfarbe/pandoc-latex-template <- main link
   - [[#logging][Logging]]
   - [[#important-notes][Important Notes]]
 - [[#important-links][Important Links]]
+
+* Hardware Setup
+
+In Mission Planner, with the autopilot connected. Go to the "CONFIG" tab, and
+select the "Full Parameter List". In the parameter list, you will need to find
+one of the "~SERIAL#~" sections. This will depend on what autopilot you are using
+and what port you are connecting the Samamet to. Refer to the documentation of
+your specific autopilot for the mapping of the physical hardware ports, to their
+name in Mission Planner.
+
+Under the "~SERIAL#~" section, change the "~SERAIL#_BAUD~" parameter to "=9=", or in
+the options drop-down, select "=9600=", to set the baud rate to 9600.
+
+Then under the "~SERIAL#_PROTOCOL~" section, change the parameter to "=28=" or
+in the options drop-down, select "~Scripting~", to enable scripting on that
+serial port. This allows for the Lua script to access this port.
+
+It is important to note that if you have multiple scripting ports active at
+once, the script will by default select the first port. So to ensure that the
+script is connected to the correct port, you can edit the below line:
+
+#+begin_src lua
+local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port")
+#+end_src
+
+To change ~serial:find_serial(0)~, which finds the first serial port, to
+~serial:find_serial(1)~, to find the second serial port.
+
+Instead of editing the script, you can simply ensure that the Samamet is on the
+first scripting port, and the other serial scripting device is set up for the
+second serial port.
+
+* Error Messages Overview
+** Quick Reference Table
+
+| Mission Planner Output             | Log File          | Error Type                |
+|------------------------------------+-------------------+---------------------------|
+| ERROR: PTH has failed to send data | No data received  | Disconnected sensor       |
+| ERROR: PTH Data failed checksum    | Checksum fail     | Corrupted/Incomplete data |
+| ERROR: Failed to parse data        | Data parsing fail | Corrupted/Incomplete data |
+
+** Explanation
+
+There are several errors that can occur when running the script. The two  main
+errors you will encounter are a disconnected sensor, or corrupted or incomplete
+data.
+
+If the sensor is disconnected or experiences a temporary interrupt in its
+transmission of data, you would see the below error in the Mission Planner
+output.
+
+#+begin_example
+6/11/2024 11:02:42 AM : ERROR: PTH has failed to send data
+#+end_example
+
+In the BIN file, under the Samamet's section in the error column, the message
+"No data received" will appear to signify a disconnected sensor.
+
+A disconnected sensor could come from an improper connection between the Samamet
+and the autopilot. Verify that the connection is good and the cable does not
+have any shorts. Also ensure that the Samamet is receiving power and is on. Also
+ensure that the serial port is set up correctly in Mission Planner. Mainly check
+that the baud rate is set to the baud rate of the Samamet, which is 9600.
+
+A checksum fail is primary way that corrupted or incomplete data is caught. If
+there is a checksum error, you will see the below message in Mission Planner.
+
+#+begin_example
+6/11/2024 11:02:42 AM : ERROR: PTH Data failed checksum
+#+end_example
+
+In the BIN file, you will see "Checksum fail" in the error column for the
+Samamet.
+
+Corrupted or incomplete data can also appear as a data parsing fail, which in
+Mission Planner, will be shown in the below message.
+
+#+begin_example
+6/11/2024 11:02:42 AM : ERROR: Failed to parse data
+#+end_example
+
+In the BIN file, you will see "Data parsing fail" in the error column for the
+Samamet.
+
+In the event of repeated corrupted or incomplete data from the Samamet, it is
+possible that the connection between Samamet and the autopilot could be
+experience interference or simply a partially incomplete connection.
+
 
 * Code Overview
 Over view of the ~serial_pth.lua~ script for decoding and logging data from the
@@ -74,14 +166,14 @@ PORT:set_flow_control(0)
 #+end_src
 
 This sets up the serial connection between the PTH and the flight controller.
-A baudrate of 9600 is used since this is the speed the sensor operates at.
+A baud rate of 9600 is used since this is the speed the sensor operates at.
 
-After we set the baudrate, we then find the first serial port that is currently
+After we set the baud rate, we then find the first serial port that is currently
 open and using protocol 28, which is the ArduPilot protocol for scripting.
 
 #+begin_quote
 *NOTE*:
-1. make sure to set the correct baudrate of 9600 and protocol 28 on the serial
+1. make sure to set the correct baud rate of 9600 and protocol 28 on the serial
    line being used to ensure the sensor is connected.
 2. If you have multiple serial ports set to protocol 28 (Scripting), make sure
    to have the Samamet on the highest port, or to set the =0= in ~find_serial()~
@@ -608,4 +700,4 @@ paper.
 10. ~logger:write()~ method documentation
     + https://ardupilot.org/dev/docs/code-overview-adding-a-new-log-message.html
 
-#  LocalWords:  ArduPilot Lua regexes Samamet
+#  LocalWords:  ArduPilot Lua regexes Samamet Samamet's
