@@ -408,11 +408,8 @@ function verify_checksum(message_string)
     checksum = (checksum ~ string_bytes[i])
   end
 
-  if checksum ~= incoming_checksum then
-    return false
-  else
-    return true
-  end
+  -- check if checksum matches, return true or false
+  return (checksum == incoming_checksum)
 end
 #+end_src
 
