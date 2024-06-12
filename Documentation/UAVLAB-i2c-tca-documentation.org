@@ -11,11 +11,10 @@ https://github.com/jlacko/pandoc-latex-template <- the one I'm using
 https://github.com/Wandmalfarbe/pandoc-latex-template <- main link
 #+end_comment
 
-
 * Table of Contents :toc:
 - [[#error-messages-overview][Error Messages Overview]]
   - [[#quick-reference-table][Quick Reference Table]]
-  - [[#explination][Explination]]
+  - [[#explanation][Explanation]]
 - [[#code-overview][Code Overview]]
   - [[#global-values-and-initialization][Global Values and Initialization]]
   - [[#tca-channel-selecting][TCA Channel Selecting]]
@@ -25,12 +24,12 @@ https://github.com/Wandmalfarbe/pandoc-latex-template <- main link
 * Error Messages Overview
 
 ** Quick Reference Table
-| Mission Planner Output       | Log File                                    | Error Type                       |
-|------------------------------+---------------------------------------------+----------------------------------|
-| sensor disconnected, tube: # | Sensor Disconnected (sensor fail)           | Sensor failure/disconnected      |
-| Error when selecting tube #  | Failed to switch channel (multiplexer fail) | Multiplexer failure/disconnected |
+| Mission Planner Output       | Log File                                    | Error Type          |
+|------------------------------+---------------------------------------------+---------------------|
+| sensor disconnected, tube: # | Sensor Disconnected (sensor fail)           | Sensor failure      |
+| Error when selecting tube #  | Failed to switch channel (multiplexer fail) | Multiplexer failure |
 
-** Explination
+** Explanation
 When using the script, if there is an error with the sensor array, you will see
 an error message in the Mission Planner output, and in the error column in the
 data from the sensor in the BIN file.
@@ -49,7 +48,7 @@ in Mission Planner.
 6/11/2024 11:02:42 AM : sensor disconnected, tube: 2
 #+end_example
 
-In the log file you would see the message ~"Sensor Disconnected (sensor fail)"~.
+In the log file you would see the message "Sensor Disconnected (sensor fail)".
 
 A multiplexer failure is when the script cannot communicate with the multiplexer
 to switch the selected channel. This usually means the multiplexer is either
@@ -68,7 +67,7 @@ multiplexer. So if you experience this error and have modified the script, make
 sure that the channel number you are passing in is a valid channel.
 
 In the log file, if you are having a multiplexer failure, you will see the
-message ~"Failed to switch channel (multiplexer fail)"~ in the error column of the
+message "Failed to switch channel (multiplexer fail)" in the error column of the
 specific channel
 
 * Code Overview
