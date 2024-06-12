@@ -1,6 +1,6 @@
-#+title:  I^{2}C  Pressure Transducers with a TCA9548 Multiplexer
+#+title:  I^{2}C 5 Hole Probe with a TCA9548 Multiplexer
 #+author: Justin Tussey
-#+date: 2024-06-11
+#+date: 2024-06-12
 #+options: toc:2
 
 #+begin_comment
