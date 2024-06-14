@@ -5,7 +5,7 @@ Read the data from the serial line that the PTH is connected to, then decode the
 messages from it, and log the data to the autopilots BIN file.
 
 Author: Justin Tussey
-Last Updated: 2024-06-12
+Last Updated: 2024-06-14
 ]] --
 
 -- variable to count iterations without getting message
@@ -32,10 +32,12 @@ local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port"
 PORT:begin(BAUD_RATE)
 PORT:set_flow_control(0)
 
--- Calculate checksum by taking string from '$' to '*' (but not including them),
--- then XORing each of the ASCII characters in the string with the next one in
--- the string. Then compare the result in hex with the 2 character hex code
--- after the "*"
+-- Calculate checksum by taking sub-string from $ to * (but not including
+-- them), then XORing each of the ASCII characters in the string with the next
+-- one in the string. Then compare the result in hex with the 2 character hex
+-- code after the *. Returns a boolean value of whether it passed the check.
+---@param  message_string string
+---@return boolean
 function verify_checksum(message_string)
   -- take the sub-string from (but not including) "$" and "*"
   local data_string = message_string:match("%$(.*)%*")
@@ -78,9 +80,11 @@ function verify_checksum(message_string)
 
 end
 
--- Take the data from the verified message string and split up the string, using
+-- Take the data from a verified message string and split up the string, using
 -- a comma as a delimiter. Then take the measurements from the data and log them
--- to the BIN file.
+-- to the BIN file. Return whether the parsing failed or passed
+---@param  message_string string
+---@return boolean
 function parse_data(message_string)
   -- take the sub-string from (but not including) "$" and "*"
   local data_string = message_string:match("%$(.*)%*")
@@ -128,6 +132,8 @@ end
 
 -- take the input table, and check if it has 5 elements in it, then write that
 -- data to the BIN file, with the appropriate names and units
+---@param measurements_table table
+---@return boolean
 function log_data(measurements_table)
   -- care must be taken when selecting a name, must be less than four characters and not clash with an existing log type
   -- format characters specify the type of variable to be logged, see AP_Logger/README.md
@@ -152,6 +158,7 @@ function log_data(measurements_table)
 end
 
 -- called when an error is detected, and writes all zeros to the BIN file
+---@param error_type ERROR_LIST
 function log_error(error_type)
   logger:write('SAMA', 'pres,temp1,temp2,hum,temp3,error', -- section name and labels
                'NNNNNN',                                   -- data type (char[16])
