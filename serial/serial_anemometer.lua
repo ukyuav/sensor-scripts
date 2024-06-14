@@ -201,8 +201,6 @@ function update()
     if loops_since_data_received > LOOPS_TO_FAIL then
       log_error(ERROR_LIST[1])
       gcs:send_text(0, "ERROR: Disconnected Sensor")
-      -- clear incomplete message (if there is one)
-      incoming_message = {}
     end
     return update, SCHEDULE_RATE
   end
