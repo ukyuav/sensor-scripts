@@ -8,12 +8,7 @@ Author: Justin Tussey
 Last Updated: 2024-06-14
 ]] --
 
--- variable to count iterations without getting message
-local loops_since_data_received = 0
-
--- table to hold the message that is currently being assembled
-local message_table = {}
-
+-- Global Constants --
 -- error type table
 local ERROR_LIST = {
   "No data received",      -- 1
@@ -31,6 +26,14 @@ local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port"
 -- begin the serial port
 PORT:begin(BAUD_RATE)
 PORT:set_flow_control(0)
+
+-- Global Variables --
+-- variable to count iterations without getting message
+local loops_since_data_received = 0
+
+-- table to hold the message that is currently being assembled
+local message_table = {}
+
 
 -- Calculate checksum by taking sub-string from $ to * (but not including
 -- them), then XORing each of the ASCII characters in the string with the next
@@ -58,6 +61,8 @@ function verify_checksum(message_string)
     return false
   end
 
+  -- Take the string of the checksum, convert it to a number, specifing that its
+  -- a hexadecimal number
   incoming_checksum = tonumber(incoming_checksum, 16)
 
   -- starting value of zeros, which will not effect the first XOR
