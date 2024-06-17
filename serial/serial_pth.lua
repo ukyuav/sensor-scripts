@@ -5,19 +5,31 @@ Read the data from the serial line that the PTH is connected to, then decode the
 messages from it, and log the data to the autopilots BIN file.
 
 Author: Justin Tussey
-Last Updated: 2024-06-14
-]] --
+Last Updated: 2024-06-17
+]]--
 
--- Global Constants --
+-- Global Constants
+
+-- initialize serial connection
+local BAUD_RATE = 9600
+
+-- Max length of the messages from the anemometer
+local MAX_MESSAGE_LENGTH = 60
+
+-- Return rate and calculations
+local SCHEDULE_RATE = 100 --milliseconds
+local TIME_BETWEEN_DATA = 1000 --milliseconds
+-- number of how many loops we need for us to properly flag that the sensor is
+-- not sending data (// is floor division (removes decimal))
+local LOOPS_TO_FAIL = (TIME_BETWEEN_DATA // SCHEDULE_RATE) + (1)
+
 -- error type table
 local ERROR_LIST = {
   "No data received",      -- 1
   "Checksum fail",         -- 2
   "Data parsing fail",     -- 3
+  "Invalid data frame"     -- 4
 }
-
--- initialize serial connection
-local BAUD_RATE = 9600
 
 -- find the serial first (0) scripting serial port instance
 -- SERIALx_PROTOCOL 28
@@ -27,13 +39,32 @@ local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port"
 PORT:begin(BAUD_RATE)
 PORT:set_flow_control(0)
 
--- Global Variables --
--- variable to count iterations without getting message
+-- Global Variables
+-- variable to count iterations without recieving message from the Samamet
 local loops_since_data_received = 0
 
--- table to hold the message that is currently being assembled
-local message_table = {}
 
+-- Take in string and verify that it is a valid message frame. Specifically a
+-- message in the NMEA-0183 format, which starts with "$" and ends with <CR><LF>
+-- (DOS line ending)
+---@param message_string string
+---@return boolean
+function verify_valid_frame(message_string)
+  -- get the first character in the message, which should be "$" if valid
+  local head = string.sub(message_string, 1, 1)
+
+  -- get the last two characters in the message, which should be <CR><LF>
+  -- ("\r\n") if valid
+  local tail = string.sub(message_string, #message_string-1, #message_string)
+
+  if (head ~= "$") then
+    return false
+  elseif (tail ~= "\r\n") then
+    return false
+  end
+
+  return true
+end
 
 -- Calculate checksum by taking sub-string from $ to * (but not including
 -- them), then XORing each of the ASCII characters in the string with the next
@@ -82,7 +113,6 @@ function verify_checksum(message_string)
 
   -- check if checksum matches, return true or false
   return (checksum == incoming_checksum)
-
 end
 
 -- Take the data from a verified message string and split up the string, using
@@ -132,7 +162,6 @@ function parse_data(message_string)
   -- return whether data input data matched needed format (table with 5
   -- elements)
   return log_data(measurements_table)
-
 end
 
 -- take the input table, and check if it has 5 elements in it, then write that
@@ -150,10 +179,10 @@ function log_data(measurements_table)
     return false
   end
   logger:write('SAMA', 'pres,temp1,temp2,hum,temp3,error', -- section name and labels
-               'NNNNNN',                              -- data type (char[16])
-               'POO%O-',                              -- units,(Pa, C, C, % (humidity), C)
-               '------',                              -- multipliers (- signifies no multiplier)
-               measurements_table[1],                -- data for labels
+               'NNNNNN',                                   -- data type (char[16])
+               'POO%O-',                                   -- units,(Pa, C, C, % (humidity), C)
+               '------',                                   -- multipliers (- signifies no multiplier)
+               measurements_table[1],                      -- data for labels
                measurements_table[2],
                measurements_table[3],
                measurements_table[4],
@@ -162,8 +191,9 @@ function log_data(measurements_table)
   return true
 end
 
--- called when an error is detected, and writes all zeros to the BIN file
----@param error_type ERROR_LIST
+-- called when an error is detected, and writes all zeros to the BIN file and
+-- writes what kind of error was experienced
+---@param error_type string
 function log_error(error_type)
   logger:write('SAMA', 'pres,temp1,temp2,hum,temp3,error', -- section name and labels
                'NNNNNN',                                   -- data type (char[16])
@@ -172,54 +202,70 @@ function log_error(error_type)
                '0', '0', '0', '0', '0', error_type)        -- zeros for labels since there is an error with the PTH or its data
 end
 
-
+-- primary loop. Gets message from serial interface, verifies that it is valid,
+-- then logs the data to the autopilots BIN file
+---@return function
+---@return integer
 function update()
   local n_bytes = PORT:available()
 
-  -- If we have received no bytes or have not received any new bytes, increment
-  -- the count of loops without data. If it reaches 11 or more
-  -- (100ms * 11 = 1.1sec), then log an error.
+  -- Check if there are any bytes available, if not log an error after the
+  -- specified number of failed loops
   if n_bytes <= 0 then
     loops_since_data_received = loops_since_data_received + 1
-    if loops_since_data_received >= 11 then
+    if loops_since_data_received >= LOOPS_TO_FAIL then
       log_error(ERROR_LIST[1])
-      -- Send error message to mission planner with priority 0 (error)
-      gcs:send_text(0, "ERROR: PTH has failed to send data")
-      -- clear incomplete message (if there is one)
-      message_table = {}
+      gcs:send_text(0, "ERROR: Disconnected Sensor")
     end
-    return update, 100
+    return update, SCHEDULE_RATE
   end
 
-  -- read bytes from the serial line until we hit '0x0A' which is <LF>, the
-  -- ending of the message. Then process the message
+  -- get MAX_MESSAGE_LENGTH bytes from the serial line, and place them into a
+  -- string
+  local message_string = PORT:readstring(MAX_MESSAGE_LENGTH)
+
+  -- make sure we got a message from the serial line
+  if (message_string == nil or #message_string <= 0) then
+    return update, SCHEDULE_RATE
+  end
+
+  -- clear loops since data received since we passed the checks to verify we got
+  -- a message
   loops_since_data_received = 0
-  while n_bytes > 0 do
-    local byte = PORT:read()
-    if byte == 0x0A then
-      table.insert(message_table, byte)
-      local message_string = string.char(table.unpack(message_table))
-      if not (verify_checksum(message_string)) then
-        log_error(ERROR_LIST[2])
-        gcs:send_text(0, "ERROR: PTH Data failed checksum")
-        message_table = {}
-        return update, 100
-      end
-      if not (parse_data(message_string)) then
-        log_error(ERROR_LIST[3])
-        gcs:send_text(0, "ERROR: Failed to parse data")
-        message_table = {}
-        return update, 100
-      end
-      -- reset for the next message
-      message_table = {}
-      return update, 100
-    end
-    table.insert(message_table, byte)
-    n_bytes = n_bytes - 1
+
+  -- check if we have a valid data frame, which checks for the NMEA-0183
+  -- sentence start and ending characters. If not valid (which means we do not
+  -- have a complete message) clear the queue and return
+  if not (verify_valid_frame(message_string)) then
+    -- Read the available bytes in the queue and do nothing with them.
+    -- We effectively clear the queue
+    PORT:readstring(PORT:available():toint())
+    log_error(ERROR_LIST[4])
+    return update, SCHEDULE_RATE
   end
 
-  return update, 100 -- reschedules the loop for every 100ms
+  -- verify the checksum in the message to check if the data has been corrupted
+  -- log an error if we fail the check
+  if not (verify_checksum(message_string)) then
+    log_error(ERROR_LIST[2])
+    gcs:send_text(0, "ERROR: Data failed checksum")
+    gcs:send_text(7, message_string)
+    return update, SCHEDULE_RATE
+  end
+
+  -- parse and log the data, log error if we experience an issue. Most likely
+  -- means that the data was corrupted and was not caught by the checksum
+  -- verification (unlikely)
+  if not (parse_data(message_string)) then
+    log_error(ERROR_LIST[3])
+    gcs:send_text(0, "ERROR: Failed to parse data")
+    return update, SCHEDULE_RATE
+  end
+
+  -- gcs:send_text(7, message_string)
+  -- reschedule the update function to run every SCHEDULE_RATE milliseconds
+  return update, SCHEDULE_RATE
 end
 
-return update() -- run immediately before starting to reschedule
+-- run immediately before starting to reschedule
+return update()
