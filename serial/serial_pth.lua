@@ -24,16 +24,18 @@ local TIME_BETWEEN_DATA = 1000 --milliseconds
 local LOOPS_TO_FAIL = (TIME_BETWEEN_DATA // SCHEDULE_RATE) + (1)
 
 -- error type table
+-- must be 16 characters or less
 local ERROR_LIST = {
-  "No data received",      -- 1
-  "Checksum fail",         -- 2
-  "Data parsing fail",     -- 3
-  "Invalid data frame"     -- 4
+  "No data received", -- 1
+  "Checksum fail",    -- 2
+  "Parsing fail",     -- 3
+  "Invalid frame"     -- 4
 }
 
 -- find the serial first (0) scripting serial port instance
 -- SERIALx_PROTOCOL 28
 local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port")
+-- local PORT = assert(serial:find_serial(1),"Could not find Scripting Serial Port")
 
 -- begin the serial port
 PORT:begin(BAUD_RATE)
@@ -192,7 +194,8 @@ function log_data(measurements_table)
 end
 
 -- called when an error is detected, and writes all zeros to the BIN file and
--- writes what kind of error was experienced
+-- writes what kind of error was experienced. error_type parameter must be 16
+-- bytes long or less
 ---@param error_type string
 function log_error(error_type)
   logger:write('SAMA', 'pres,temp1,temp2,hum,temp3,error', -- section name and labels
@@ -215,7 +218,7 @@ function update()
     loops_since_data_received = loops_since_data_received + 1
     if loops_since_data_received >= LOOPS_TO_FAIL then
       log_error(ERROR_LIST[1])
-      gcs:send_text(0, "ERROR: Disconnected Sensor")
+      gcs:send_text(0, "ERROR SAMA: Disconnected Sensor")
     end
     return update, SCHEDULE_RATE
   end
@@ -235,7 +238,7 @@ function update()
 
   -- check if we have a valid data frame, which checks for the NMEA-0183
   -- sentence start and ending characters. If not valid (which means we do not
-  -- have a complete message) clear the queue and return
+  -- have a complete message) clear the queue to realign messages and return
   if not (verify_valid_frame(message_string)) then
     -- Read the available bytes in the queue and do nothing with them.
     -- We effectively clear the queue
@@ -248,7 +251,7 @@ function update()
   -- log an error if we fail the check
   if not (verify_checksum(message_string)) then
     log_error(ERROR_LIST[2])
-    gcs:send_text(0, "ERROR: Data failed checksum")
+    gcs:send_text(0, "ERROR SAMA: Data failed checksum")
     gcs:send_text(7, message_string)
     return update, SCHEDULE_RATE
   end
@@ -258,7 +261,7 @@ function update()
   -- verification (unlikely)
   if not (parse_data(message_string)) then
     log_error(ERROR_LIST[3])
-    gcs:send_text(0, "ERROR: Failed to parse data")
+    gcs:send_text(0, "ERROR SAMA: Failed to parse data")
     return update, SCHEDULE_RATE
   end
 
