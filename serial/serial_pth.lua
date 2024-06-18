@@ -5,7 +5,7 @@ Read the data from the serial line that the PTH is connected to, then decode the
 messages from it, and log the data to the autopilots BIN file.
 
 Author: Justin Tussey
-Last Updated: 2024-06-17
+Last Updated: 2024-06-18
 ]]--
 
 -- Global Constants
@@ -32,17 +32,26 @@ local ERROR_LIST = {
   "Invalid frame"     -- 4
 }
 
+-- info about the messages we receive
+local MESSAGE_INFO = {
+  ["UKPTH"] = {
+    length = 60,
+    fields = 12,
+    measurements = 5
+  }
+}
+
 -- find the serial first (0) scripting serial port instance
 -- SERIALx_PROTOCOL 28
-local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port")
--- local PORT = assert(serial:find_serial(1),"Could not find Scripting Serial Port")
+local PORT = assert(serial:find_serial(0),"No Scripting Serial Port")
+-- local PORT = assert(serial:find_serial(1),"No Scripting Serial Port")
 
 -- begin the serial port
 PORT:begin(BAUD_RATE)
 PORT:set_flow_control(0)
 
 -- Global Variables
--- variable to count iterations without recieving message from the Samamet
+-- variable to count iterations without receiving message from the Samamet
 local loops_since_data_received = 0
 
 
@@ -59,13 +68,11 @@ function verify_valid_frame(message_string)
   -- ("\r\n") if valid
   local tail = string.sub(message_string, #message_string-1, #message_string)
 
-  if (head ~= "$") then
-    return false
-  elseif (tail ~= "\r\n") then
-    return false
+  if (head == "$") and (tail == "\r\n") then
+    return true
   end
 
-  return true
+  return false
 end
 
 -- Calculate checksum by taking sub-string from $ to * (but not including
@@ -94,8 +101,8 @@ function verify_checksum(message_string)
     return false
   end
 
-  -- Take the string of the checksum, convert it to a number, specifing that its
-  -- a hexadecimal number
+  -- Take the string of the checksum, convert it to a number, specifying that
+  -- its a hexadecimal number
   incoming_checksum = tonumber(incoming_checksum, 16)
 
   -- starting value of zeros, which will not effect the first XOR
@@ -132,64 +139,77 @@ function parse_data(message_string)
     return false
   end
 
-  local data_table = {}
+  -- extract the message type header from the message
+  local message_type = message_string:match("%$(.-),")
 
   -- take the string, match up until the first comma, place that substring
-  -- into the table, then repeat for the rest of the string.
-  -- The regex is matching all characters up until it finds a ','. The "+" at
+  -- into the data_table, then repeat for the rest of the string.
+  -- The regex is matching all characters up until it finds a ",". The "+" at
   -- the end allows matching more than once
+  local data_table = {}
   for str in string.gmatch(data_string, "([^" ..",".. "]+)") do
     table.insert(data_table, str)
   end
 
-  -- make sure regex successfully splits by commas.
-  -- (hopefully will not reach here since the checksum should fail before then)
-  if #data_table ~= 12 then
+  -- check if we extracted the expected number of data fields for this message
+  -- type
+  if #data_table ~= MESSAGE_INFO[message_type].fields then
     return false
   end
 
-  local measurements_table={}
-  for i=3,12,2 do
-    table.insert(measurements_table, data_table[i])
+  -- extract the measurements (numbers) from the fields in data_table
+  local measurement_table={}
+  for i = 1, #data_table do
+    local m = string.match(data_table[i], "%d*%.%d*")
+    if m ~= nil then
+      table.insert(measurement_table, m)
+    end
+  end
+
+  -- check if we extracted the expected number of measurements
+  if #measurement_table ~= MESSAGE_INFO[message_type].measurements then
+    return false
   end
 
 -- report data to Mission Planner, not necessary all the time
-  gcs:send_text(7, "p:"  .. string.format(" %.1f  ", measurements_table[1])  ..
-                   "t1:" .. string.format(" %.1f  ", measurements_table[2])  ..
-                   "t2:" .. string.format(" %.1f  ", measurements_table[3])  ..
-                   "h:"  .. string.format(" %.1f  ", measurements_table[4])  ..
-                   "t3:" .. string.format(" %.1f", measurements_table[5])
+  gcs:send_text(7, "p:"  .. string.format(" %.1f  ", measurement_table[1])  ..
+                   "t1:" .. string.format(" %.1f  ", measurement_table[2])  ..
+                   "t2:" .. string.format(" %.1f  ", measurement_table[3])  ..
+                   "h:"  .. string.format(" %.1f  ", measurement_table[4])  ..
+                   "t3:" .. string.format(" %.1f", measurement_table[5])
   )
 
   -- return whether data input data matched needed format (table with 5
   -- elements)
-  return log_data(measurements_table)
+  return log_data(measurement_table)
 end
 
 -- take the input table, and check if it has 5 elements in it, then write that
 -- data to the BIN file, with the appropriate names and units
----@param measurements_table table
+---@param measurement_table table
 ---@return boolean
-function log_data(measurements_table)
+function log_data(measurement_table)
+  -- check if we have the expected number of measurements
+  if #measurement_table ~= MESSAGE_INFO["UKPTH"].measurements then
+    return false
+  end
+
   -- care must be taken when selecting a name, must be less than four characters and not clash with an existing log type
   -- format characters specify the type of variable to be logged, see AP_Logger/README.md
   -- https://github.com/ArduPilot/ardupilot/tree/master/libraries/AP_Logger
   -- not all format types are supported by scripting only: i, L, e, f, n, M, B, I, E, and N
   -- Data MUST be integer|number|uint32_t_ud|string , type to match format string
   -- lua automatically adds a timestamp in micro seconds
-  if #measurements_table ~= 5 then
-    return false
-  end
   logger:write('SAMA', 'pres,temp1,temp2,hum,temp3,error', -- section name and labels
                'NNNNNN',                                   -- data type (char[16])
                'POO%O-',                                   -- units,(Pa, C, C, % (humidity), C)
                '------',                                   -- multipliers (- signifies no multiplier)
-               measurements_table[1],                      -- data for labels
-               measurements_table[2],
-               measurements_table[3],
-               measurements_table[4],
-               measurements_table[5],
-               "Normal")
+               measurement_table[1],                      -- data for labels
+               measurement_table[2],
+               measurement_table[3],
+               measurement_table[4],
+               measurement_table[5],
+               'Normal')
   return true
 end
 
@@ -244,6 +264,8 @@ function update()
     -- We effectively clear the queue
     PORT:readstring(PORT:available():toint())
     log_error(ERROR_LIST[4])
+    gcs:send_text(0, "ERROR SAMA: Invalid message frame")
+    gcs:send_text(7, message_string)
     return update, SCHEDULE_RATE
   end
 
@@ -262,6 +284,7 @@ function update()
   if not (parse_data(message_string)) then
     log_error(ERROR_LIST[3])
     gcs:send_text(0, "ERROR SAMA: Failed to parse data")
+    gcs:send_text(7, message_string)
     return update, SCHEDULE_RATE
   end
 
