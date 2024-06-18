@@ -9,7 +9,7 @@ Uses CV7-OEM Ultrasonic Wind Sensor from LCJ Capteurs
 Sends Data every 512 milliseconds, Baud rate of 4800
 
 Author: Justin Tussey
-Last Updated: 2024-06-14
+Last Updated: 2024-06-18
 ]]--
 
 -- Global Constants --
@@ -34,12 +34,28 @@ local ERROR_LIST = {
   "Checksum fail",    -- 2
   "Parsing fail",     -- 3
   "Invalid frame",    -- 4
-  "Alarm received"    -- 5
+  -- "Alarm received"    -- 5
 }
+
+-- info about the messages we receive
+local MESSAGE_INFO = {
+  ["IIMWV"] = {
+    length = 28,
+    fields = 6,
+    measurements = 2
+  },
+  -- ["WIXDR"] = {
+  --   length = 22,
+  --   fields = 4,
+  --   measurements = 1
+  -- }
+}
+
 
 -- find the serial first (0) scripting serial port instance
 -- SERIALx_PROTOCOL 28
 local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port")
+-- local PORT = assert(serial:find_serial(1),"Could not find Scripting Serial Port")
 
 -- begin the serial port
 PORT:begin(BAUD_RATE)
@@ -151,65 +167,64 @@ function parse_data(message_string)
     return false
   end
 
+  -- extract the message type header from the message
   local message_type = message_string:match("%$(.-),")
 
-  local data_table = {}
-
   -- take the string, match up until the first comma, place that substring
-  -- into the table, then repeat for the rest of the string.
+  -- into the data_table, then repeat for the rest of the string.
   -- The regex is matching all characters up until it finds a ",". The "+" at
   -- the end allows matching more than once
+  local data_table = {}
   for str in string.gmatch(data_string, "([^" ..",".. "]+)") do
     table.insert(data_table, str)
   end
 
-  -- report data to mission planner (optional)
-  gcs:send_text(7, "angle: " ..  tostring(data_table[2]) ..
-                   " speed: " .. tostring(data_table[4]))
-
-  if message_type == "IIMWV" then
-    return log_wind_speed(data_table)
-  -- elseif message_type == "WIXDR" then
-  --   return log_wind_temp(data_table)
-  end
-
-  return true
-end
-
--- take the input table, and check if it has 6 elements in it, then write that
--- data to the BIN file, with the appropriate names and lables
----@param message_table table
----@return boolean
-function log_wind_speed(message_table)
-  local status_message = "Normal"
-
-  if #message_table ~= 6 then
+  -- check if we extracted the expected number of data fields for this message
+  -- type
+  if #data_table ~= MESSAGE_INFO[message_type].fields then
     return false
   end
 
-  if message_table[6] == "V" then
-    status_message = ERROR_LIST[5]
+  -- extract the measurements (numbers) from the fields in data_table
+  local measurement_table={}
+  for i = 1, #data_table do
+    local m = string.match(data_table[i], "%d*%.%d*")
+    if m ~= nil then
+      table.insert(measurement_table, m)
+    end
   end
+
+  -- check if we extracted the expected number of measurements
+  if #measurement_table ~= MESSAGE_INFO[message_type].measurements then
+    return false
+  end
+
+  if message_type == "IIMWV" then
+    return log_wind_speed(measurement_table)
+  end
+
+   return false
+end
+
+-- take the input table, then write that data to the BIN file, with the
+-- appropriate names and labels
+---@param measurement_table table
+---@return boolean
+function log_wind_speed(measurement_table)
+  -- check if we have the expected number of measurements
+  if #measurement_table ~= MESSAGE_INFO["IIMWV"].measurements then
+    return false
+  end
+
+  -- gcs:send_text(7, "angle: " .. tostring(measurement_table[1]) .. " speed: " .. tostring(measurement_table[2]))
 
   logger:write('ANEM', 'angle,speed,error',  -- section name and labels
                'NNN',                        -- data type (char[16])
-               message_table[2],        -- data for labels
-               message_table[4],
-               status_message)
-
-
+               measurement_table[1],             -- data for labels
+               measurement_table[2],
+               'Normal')
   return true
 end
-
--- ---@param message_table table
--- ---@return boolean
--- function log_wind_temp(message_table)
---   if #message_table ~= 4 then
---     return false
---   end
-
---   return true
--- end
 
 -- called when an error is detected, and writes all zeros to the BIN file and
 -- writes what kind of error was experienced. error_type parameter must be 16
@@ -218,8 +233,8 @@ end
 function log_error(error_type)
   logger:write('ANEM', 'angle,speed,error',  -- section name and labels
                'NNN',                        -- data type (char[16])
-               "0",                          -- data for labels
-               "0",
+               '0',                          -- data for labels
+               '0',
                error_type)
 end
 
@@ -262,6 +277,8 @@ function update()
     -- We effectively clear the queue
     PORT:readstring(PORT:available():toint())
     log_error(ERROR_LIST[4])
+    gcs:send_text(0, "ERROR ANEM: Invalid message frame")
+    gcs:send_text(7, message_string)
     return update, SCHEDULE_RATE
   end
 
@@ -285,6 +302,7 @@ function update()
   if not (parse_data(message_string)) then
     log_error(ERROR_LIST[3])
     gcs:send_text(0, "ERROR ANEM: Failed to parse data")
+    gcs:send_text(7, message_string)
     return update, SCHEDULE_RATE
   end
 
