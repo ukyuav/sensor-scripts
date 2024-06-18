@@ -79,13 +79,11 @@ function verify_valid_frame(message_string)
   -- ("\r\n") if valid
   local tail = string.sub(message_string, #message_string-1, #message_string)
 
-  if (head ~= "$") then
-    return false
-  elseif (tail ~= "\r\n") then
-    return false
+  if (head == "$") and (tail == "\r\n") then
+    return true
   end
 
-  return true
+  return false
 end
 
 -- Checks if a message is "useful". Make sure its one of the messages we would
