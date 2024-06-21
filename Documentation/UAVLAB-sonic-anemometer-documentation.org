@@ -528,7 +528,7 @@ Since the anemometer sends several messages that we do not care about, it is
 important that we can throw out any messages early into the loop to prevent wasted
 time.
 
-We first use the regex "~%$(.-),~", which will first find the "=$=" character,
+We first use the regex "=%$(.-),=", which will first find the "=$=" character,
 which signifies the start of a NMEA-0183 message. It then matches any character
 up until the first comma. This field, according to the NMEA-0183 standard, hold
 the message identifier.
@@ -564,7 +564,7 @@ end
 #+end_src
 
 We first take the message string and perform a regular expression (regex or
-regexp) match on the string. Here the Lua regex "~%$(.*)%*~" first looks for a
+regexp) match on the string. Here the Lua regex "=%$(.*)%*=" first looks for a
 "~$~", once it finds one, it then matches any characters after the "~$~" up
 until it finds a "~*~". This extracts the main body of the message, which
 contains the data that we need to process for logging. An example of a full
@@ -579,7 +579,7 @@ returned a value of ~nil~. We check for this, and if this is true, we return
 false for the caller to handle.
 
 We then perform another regex on the message string again to extract the
-checksum. The regex "~%*([0-9A-F][0-9A-F])~" first finds a "~*~". After it finds
+checksum. The regex "=%*([0-9A-F][0-9A-F])=" first finds a "~*~". After it finds
 one, it then matches exactly two characters. Since we are matching for a
 hexadecimal number, the regex will only accept characters in hexadecimal
 numbers. This includes all digits between zero and nine, and all capital version
@@ -589,7 +589,7 @@ Once we have extracted the checksum, we verify that the regex was successful by
 making sure the resulting string is not ~nil~. If it is ~nil~, we return false
 for the caller to handle.
 
-If we successfully extraced the checksum value, we then need to convert it to an
+If we successfully extracted the checksum value, we then need to convert it to an
 integer since we cannot compare the string directly with the checksum value we
 will calculate later. To do this we call the ~tonumber()~ function. We pass in
 the string we want convert to a number, and the base of the number we are
@@ -677,7 +677,7 @@ end
 #+end_src
 
 We first take the message string and perform a regular expression (regex or
-regexp) match on the string. Here the Lua regex "~%$(.*)%*~" first looks for a
+regexp) match on the string. Here the Lua regex "=%$(.*)%*=" first looks for a
 "~$~", once it finds one, it then matches any characters after the "~$~" up
 until it finds a "~*~". This extracts the main body of the message, which
 contains the data that we need to process for logging. An example of a full
@@ -691,7 +691,7 @@ Before we continue, we check if the regex failed, if it has, it will have
 returned a value of ~nil~. We check for this, and if this is true, we return
 false for the caller to handle.
 
-We then extract the message header with the regex "~%$(.-),~", which will
+We then extract the message header with the regex "=%$(.-),=", which will
 extract the first field in the message, we will use this later in the function.
 We also verify that regex worked by checking if the value is ~nil~.
 
@@ -699,11 +699,11 @@ After we match the main body of the message, we can start preparing to extract
 the data from it. First we initialize the ~data_table~ table, which is where
 we will store each of the messages sections for processing.
 
-Next we perform another regex on the message body. Here the regex "~([^" ..","..
-"]+)~", or more simply written as "~([^,]+)~" takes the string, and matches
-every character up until it finds a ",". It does this for all of the segments in
-the string. We then use the for loop to iterate over all of these segments and
-place them into are previously defined ~data_table~.
+Next we perform another regex on the message body. Here the regex
+"=([^" ..",".. "]+)=", or more simply written as "~([^,]+)~" takes the string,
+and matches every character up until it finds a ",". It does this for all of the
+segments in the string. We then use the for loop to iterate over all of these
+segments and place them into are previously defined ~data_table~.
 
 We then check the size of ~data_table~, and make sure it matches up with the
 number of fields that we know are present in the message we are parsing. In our
@@ -711,7 +711,7 @@ case the "IIMWV" has six fields. If we find that this is not true, we return
 false for the caller to handle.
 
 We then iterate over ~data_table~ checking each value and seeing if it matches
-with the regex "~%d*%.%d*~", which accepts any floating point number. We then
+with the regex "=%d*%.%d*=", which accepts any floating point number. We then
 place any matches
 
 Finally we call our log function and pass in the ~measurements_table~ as an
