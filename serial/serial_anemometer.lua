@@ -9,7 +9,7 @@ Uses CV7-OEM Ultrasonic Wind Sensor from LCJ Capteurs
 Sends Data every 512 milliseconds, Baud rate of 4800
 
 Author: Justin Tussey
-Last Updated: 2024-06-20
+Last Updated: 2024-06-21
 ]]--
 
 -- Global Constants --
@@ -91,6 +91,7 @@ end
 ---@param  message_string string
 ---@return boolean
 function is_message_useful(message_string)
+  -- extract the message header from the first field
   local message_type = message_string:match("%$(.-),")
 
   if message_type == nil then
@@ -167,6 +168,10 @@ function parse_data(message_string)
 
   -- extract the message type header from the message
   local message_type = message_string:match("%$(.-),")
+  -- check that the regex successfully parsed the string
+  if message_type == nil then
+    return false
+  end
 
   -- take the string, match up until the first comma, place that substring
   -- into the data_table, then repeat for the rest of the string.
