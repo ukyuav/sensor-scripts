@@ -1,11 +1,11 @@
 --[[
-PTH (Samamet) Serial Sensor Reading
+Samamet (PTH) Serial Sensor Reading
 
 Read the data from the serial line that the PTH is connected to, then decode the
 messages from it, and log the data to the autopilots BIN file.
 
 Author: Justin Tussey
-Last Updated: 2024-06-18
+Last Updated: 2024-06-21
 ]]--
 
 -- Global Constants
@@ -13,12 +13,14 @@ Last Updated: 2024-06-18
 -- initialize serial connection
 local BAUD_RATE = 9600
 
--- Max length of the messages from the anemometer
+-- Max length of the messages from the Samamet
 local MAX_MESSAGE_LENGTH = 60
 
 -- Return rate and calculations
 local SCHEDULE_RATE = 100 --milliseconds
 local TIME_BETWEEN_DATA = 1000 --milliseconds
+-- make sure that the schedule rate runs faster than how often the sensor sends data
+assert((SCHEDULE_RATE < TIME_BETWEEN_DATA), "ANEM Loop reschedule rate to long")
 -- number of how many loops we need for us to properly flag that the sensor is
 -- not sending data (// is floor division (removes decimal))
 local LOOPS_TO_FAIL = (TIME_BETWEEN_DATA // SCHEDULE_RATE) + (1)
@@ -26,10 +28,10 @@ local LOOPS_TO_FAIL = (TIME_BETWEEN_DATA // SCHEDULE_RATE) + (1)
 -- error type table
 -- must be 16 characters or less
 local ERROR_LIST = {
-  "No data received", -- 1
-  "Checksum fail",    -- 2
-  "Parsing fail",     -- 3
-  "Invalid frame"     -- 4
+  no_data       = "No data received",
+  checksum      = "Checksum fail",
+  parsing       = "Parsing fail",
+  invalid_frame = "Invalid frame",
 }
 
 -- info about the messages we receive
@@ -90,7 +92,7 @@ function verify_checksum(message_string)
     return false
   end
 
-  -- extracts the the two characters after the '*' in the message string, and
+  -- extracts the two characters after the '*' in the message string, and
   -- only accepts valid "2 character" hex numbers, ie: 4A. Then take that string
   -- then convert it to an integer (16 specifies that our input string is a hex
   -- number)
@@ -141,6 +143,10 @@ function parse_data(message_string)
 
   -- extract the message type header from the message
   local message_type = message_string:match("%$(.-),")
+  -- check that the regex successfully parsed the string
+  if message_type == nil then
+    return false
+  end
 
   -- take the string, match up until the first comma, place that substring
   -- into the data_table, then repeat for the rest of the string.
@@ -237,7 +243,7 @@ function update()
   if n_bytes <= 0 then
     loops_since_data_received = loops_since_data_received + 1
     if loops_since_data_received >= LOOPS_TO_FAIL then
-      log_error(ERROR_LIST[1])
+      log_error(ERROR_LIST.no_data)
       gcs:send_text(0, "ERROR SAMA: Disconnected Sensor")
     end
     return update, SCHEDULE_RATE
@@ -263,7 +269,7 @@ function update()
     -- Read the available bytes in the queue and do nothing with them.
     -- We effectively clear the queue
     PORT:readstring(PORT:available():toint())
-    log_error(ERROR_LIST[4])
+    log_error(ERROR_LIST.invalid_frame)
     gcs:send_text(0, "ERROR SAMA: Invalid message frame")
     gcs:send_text(7, message_string)
     return update, SCHEDULE_RATE
@@ -272,7 +278,7 @@ function update()
   -- verify the checksum in the message to check if the data has been corrupted
   -- log an error if we fail the check
   if not (verify_checksum(message_string)) then
-    log_error(ERROR_LIST[2])
+    log_error(ERROR_LIST.checksum)
     gcs:send_text(0, "ERROR SAMA: Data failed checksum")
     gcs:send_text(7, message_string)
     return update, SCHEDULE_RATE
@@ -282,7 +288,7 @@ function update()
   -- means that the data was corrupted and was not caught by the checksum
   -- verification (unlikely)
   if not (parse_data(message_string)) then
-    log_error(ERROR_LIST[3])
+    log_error(ERROR_LIST.parsing)
     gcs:send_text(0, "ERROR SAMA: Failed to parse data")
     gcs:send_text(7, message_string)
     return update, SCHEDULE_RATE
@@ -295,3 +301,7 @@ end
 
 -- run immediately before starting to reschedule
 return update()
+
+--  Words for flyspell (Emacs' spell checker) to ignore, since it flags them as
+--  incorrect
+--  LocalWords:  Samamet Tussey UKPTH PTH NMEA SAMA gcs lua README SERIALx NNNNNN md uint ud XORing
