@@ -265,14 +265,18 @@ constant that we defined earlier. We also disable UART flow control with the
 ** Update Function
 Once the constants are defined and serial initialization is completed, the
 script then jumps to the end of the file (since that there is no other code
-outside of the functions) and runs the following return statement.
+outside of the functions) and runs the following statements.
 
 #+begin_src lua
+--clear the queue to prevent message build up before we schedule the loop
+PORT:readstring(PORT:available():toint())
 return update() -- run immediately before starting to reschedule
 #+end_src
 
-This statement calls the ~update()~ function, which is the main driver function
-in this script.
+During the initialization process, we can collect one or more messages in the
+serial queue, which can cause issues when we start trying to read messages from
+the serial line. To prevent any errors that can arise from having more that one
+message in the queue, we simply clear it before we schedule the update function.
 
 #+begin_src lua
 function update()
