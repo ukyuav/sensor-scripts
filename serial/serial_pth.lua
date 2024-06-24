@@ -5,7 +5,7 @@ Read the data from the serial line that the PTH is connected to, then decode the
 messages from it, and log the data to the autopilots BIN file.
 
 Author: Justin Tussey
-Last Updated: 2024-06-21
+Last Updated: 2024-06-24
 ]]--
 
 -- Global Constants
@@ -20,7 +20,7 @@ local MAX_MESSAGE_LENGTH = 60
 local SCHEDULE_RATE = 100 --milliseconds
 local TIME_BETWEEN_DATA = 1000 --milliseconds
 -- make sure that the schedule rate runs faster than how often the sensor sends data
-assert((SCHEDULE_RATE < TIME_BETWEEN_DATA), "ANEM Loop reschedule rate to long")
+assert((SCHEDULE_RATE < TIME_BETWEEN_DATA), "SAMA Loop reschedule rate to long")
 -- number of how many loops we need for us to properly flag that the sensor is
 -- not sending data (// is floor division (removes decimal))
 local LOOPS_TO_FAIL = (TIME_BETWEEN_DATA // SCHEDULE_RATE) + (1)
