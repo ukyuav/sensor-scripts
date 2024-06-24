@@ -530,10 +530,15 @@ Since the anemometer sends several messages that we do not care about, it is
 important that we can throw out any messages early into the loop to prevent wasted
 time.
 
-We first use the regex "~%$(.-),~", which will first find the "=$=" character,
-which signifies the start of a NMEA-0183 message. It then matches any character
-up until the first comma. This field, according to the NMEA-0183 standard, hold
-the message identifier.
+We first use the below regex:
+
+#+begin_example
+%$(.-),
+#+end_example
+
+Which will first find the "=$=" character, which signifies the start of a
+NMEA-0183 message. It then matches any character up until the first comma. This
+field, according to the NMEA-0183 standard, hold the message identifier.
 
 We first check and see if the regex was successful by making sure the
 ~message_type~ variable is not ~nil~. If we did in fact get a message header we
