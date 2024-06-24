@@ -163,7 +163,7 @@ While possible, it is unlikely that a parsing error will come from a corrupted
 or incomplete message, since the message frame verification and checksum
 verification will catch the majority of the corrupted or incomplete messages.
 It is more likely that ~parse_data()~ has been edited and there is a bug with
-either the regexes or with how the function does data extraction.
+either the regexes or with how the function performs data extraction.
 
 * Code Overview
 #+begin_quote
@@ -396,9 +396,10 @@ $IIMWV,179.0,R,000.3,M,A*32<CR><LF>
 #+begin_comment
 *NOTE*: The end of the message has the standard DOS (Windows) line ending of a
 carriage return and a line feed, (shown as <CR> and <LF>), but are considered
-whitespace characters. Which means in most user interfaces are invisible. When
-counting the number of characters in a message, or when dealing with the length
-of a message do not forget that these characters are present in the message.
+whitespace characters. Which means in most user interfaces they are invisible.
+When counting the number of characters in a message, or when dealing with the
+length of a message do not forget that these characters are present in the
+message.
 #+end_comment
 
 To calculate the checksum from the message, we first take the "main body" of the
@@ -453,11 +454,12 @@ fields of the message. We then take each field or section of the message, which
 is delimited by commas, and place them into a table.
 
 After we have all of the fields in a table, we then iterate over the table,
-looking at each of the fields to see if they are a floating point number. If
+looking at each of the fields to see if they contain a floating point number. If
 they are, we store them in a separate measurements table.
 
 Once we have the measurements from the message, we check what message we are
-handling, and thensend the measurements to the appropriate function. In this case
+handling, and verify that we parsed all of the expected measurements for this
+message. We then send the measurements to the appropriate function. In this case
 we only have one message we handle, so there is only one logging function.
 
 In the logging function, we define the measurement section that will appear in
@@ -528,7 +530,7 @@ Since the anemometer sends several messages that we do not care about, it is
 important that we can throw out any messages early into the loop to prevent wasted
 time.
 
-We first use the regex "=%$(.-),=", which will first find the "=$=" character,
+We first use the regex "~%$(.-),~", which will first find the "=$=" character,
 which signifies the start of a NMEA-0183 message. It then matches any character
 up until the first comma. This field, according to the NMEA-0183 standard, hold
 the message identifier.
@@ -691,7 +693,7 @@ Before we continue, we check if the regex failed, if it has, it will have
 returned a value of ~nil~. We check for this, and if this is true, we return
 false for the caller to handle.
 
-We then extract the message header with the regex "=%$(.-),=", which will
+We then extract the message header with the regex "~%$(.-),~", which will
 extract the first field in the message, we will use this later in the function.
 We also verify that regex worked by checking if the value is ~nil~.
 
@@ -707,8 +709,8 @@ segments and place them into are previously defined ~data_table~.
 
 We then check the size of ~data_table~, and make sure it matches up with the
 number of fields that we know are present in the message we are parsing. In our
-case the "IIMWV" has six fields. If we find that this is not true, we return
-false for the caller to handle.
+case the "IIMWV" message has six fields. If we find that this is not true, we
+return false for the caller to handle.
 
 We then iterate over ~data_table~ checking each value and seeing if it matches
 with the regex "=%d*%.%d*=", which accepts any floating point number. We then
