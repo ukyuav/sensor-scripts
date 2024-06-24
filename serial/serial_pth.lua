@@ -299,8 +299,9 @@ function update()
   return update, SCHEDULE_RATE
 end
 
--- run immediately before starting to reschedule
-return update()
+--clear the queue to prevent message build up before we schedule the loop
+PORT:readstring(PORT:available():toint())
+return update() -- run immediately before starting to reschedule
 
 --  Words for flyspell (Emacs' spell checker) to ignore, since it flags them as
 --  incorrect
