@@ -9,7 +9,7 @@ Uses CV7-OEM Ultrasonic Wind Sensor from LCJ Capteurs
 Sends Data every 512 milliseconds, Baud rate of 4800
 
 Author: Justin Tussey
-Last Updated: 2024-06-21
+Last Updated: 2024-06-24
 ]]--
 
 -- Global Constants --
