@@ -1,4 +1,4 @@
-#+title: UAVLAB Serial PTH (Samamet) Script Documentation
+#+title: UAVLAB Serial Samamet (PTH) Script Documentation
 #+author: Justin Tussey
 #+date: 2024-06-12
 #+options: toc:2
@@ -17,9 +17,10 @@ https://github.com/Wandmalfarbe/pandoc-latex-template <- main link
   - [[#quick-reference-table][Quick Reference Table]]
   - [[#explanation][Explanation]]
 - [[#code-overview][Code Overview]]
-  - [[#global-variables][Global Variables]]
+  - [[#global-variables-and-constants][Global Variables and Constants]]
   - [[#serial-initialization][Serial Initialization]]
   - [[#update-function][Update Function]]
+  - [[#verifying-valid-frame][Verifying Valid Frame]]
   - [[#verifying-checksum][Verifying Checksum]]
   - [[#parsing-data][Parsing Data]]
   - [[#logging][Logging]]
@@ -60,239 +61,319 @@ second serial port.
 * Error Messages Overview
 ** Quick Reference Table
 
-| Mission Planner Output             | Log File          | Error Type                |
-|------------------------------------+-------------------+---------------------------|
-| ERROR: PTH has failed to send data | No data received  | Disconnected sensor       |
-| ERROR: PTH Data failed checksum    | Checksum fail     | Corrupted/Incomplete data |
-| ERROR: Failed to parse data        | Data parsing fail | Corrupted/Incomplete data |
+| Mission Planner Output            | Log File         | Error Type                |
+|-----------------------------------+------------------+---------------------------|
+| ERROR SAMA: Disconnected Sensor   | No data received | Disconnected sensor       |
+| ERROR SAMA: Invalid message frame | Invalid frame    | Corrupted/Incomplete data |
+| ERROR SAMA: Data failed checksum  | Checksum fail    | Corrupted/Incomplete data |
+| ERROR SAMA: Failed to parse data  | Parsing fail     | Corrupted/Incomplete data |
 
 ** Explanation
+*** Disconnected Sensor
 
-There are several errors that can occur when running the script. The two  main
-errors you will encounter are a disconnected sensor, or corrupted or incomplete
-data.
+If the script stops receiving data from the Samamet, it will send the following
+error to the Mission Planner output.
 
-If the sensor is disconnected or experiences a temporary interrupt in its
-transmission of data, you would see the below error in the Mission Planner
+#+begin_example
+6/11/2024 11:02:42 AM : ERROR SAMA: Disconnected Sensor
+#+end_example
+
+The error message will also appear in the log file, under the "SAMA" section in
+the errors column, with the message "No data received".
+
+A disconnected sensor error can occur when there is an improper connection
+between the Samamet and the autopilot. This can also occur if the Tx and Rx pins
+
+
+*** Corrupted or Incomplete data
+If the script receives corrupted data, or an incomplete message, there are
+several errors that can appear.
+
+**** Invalid Frame
+
+An invalid frame error is when the script detects that the message it has
+received from the serial line does not contain the standard NMEA-0183 sentence
+starting or ending characters, being '=$=' and =<CR><LF>= respectively. If the
+script detects this, it will send the following error to the Mission Planner
 output.
 
 #+begin_example
-6/11/2024 11:02:42 AM : ERROR: PTH has failed to send data
+6/11/2024 11:02:42 AM : ERROR SAMA: Invalid message frame
 #+end_example
 
-In the BIN file, under the Samamet's section in the error column, the message
-"No data received" will appear to signify a disconnected sensor.
+The error message will also appear in the log file, under the "SAMA" section in
+the errors column, with the message "Invalid frame".
 
-A disconnected sensor could come from an improper connection between the Samamet
-and the autopilot. Verify that the connection is good and the cable does not
-have any shorts. Also ensure that the Samamet is receiving power and is on. Also
-ensure that the serial port is set up correctly in Mission Planner. Mainly check
-that the baud rate is set to the baud rate of the Samamet, which is 9600.
+An invalid frame error can occur when the data coming into the autopilot has
+been corrupted. Likely due to noise on the serial line, or an improper
+connection between the Samamet and the autopilot.
 
-A checksum fail is primary way that corrupted or incomplete data is caught. If
-there is a checksum error, you will see the below message in Mission Planner.
+An invalid frame can also occur when the script reads the parts of two messages,
+and tries to decode it as a single message. This can happen if there are
+multiple messages in the serial queue at once. This is usually happens when the
+Samamet starts sending data before the script can fully initialize and start
+decoding messages, or when the script running to slow and cannot keep up with
+the amount of messages that are being sent. The script is designed to handle
+when this happens and will clear the queue to ensure it can catch back up or to
+'re-align' the messages in the queue.
+
+**** Checksum Fail
+
+A checksum fail error is when the script detects that the message has been
+corrupted in some manner. It does this by verifying that the checksum that is
+sent with the message matches with the checksum the script calculates.
+
+If the checksums do not match, or if there is an issue when extracting the
+checksum from the message, the script will send the following message to the
+Mission Planner output.
 
 #+begin_example
-6/11/2024 11:02:42 AM : ERROR: PTH Data failed checksum
+6/11/2024 11:02:42 AM : ERROR SAMA: Data failed checksum
 #+end_example
 
-In the BIN file, you will see "Checksum fail" in the error column for the
-Samamet.
+The error message will also appear in the log file, under the "SAMA" section in
+the errors column, with the message "Checksum fail".
 
-Corrupted or incomplete data can also appear as a data parsing fail, which in
-Mission Planner, will be shown in the below message.
+An checksum fail error will occur when the data coming into the autopilot has
+been corrupted. Likely due to noise on the serial line, or an improper
+connection between the Samamet and the autopilot.
+
+**** Parsing Fail
+
+A parsing fail error is when the script cannot properly extract the data from
+the message.
+
+If the script is unable to parse the message, it will send the following error
+message to the Mission Planner output.
 
 #+begin_example
-6/11/2024 11:02:42 AM : ERROR: Failed to parse data
+6/11/2024 11:02:42 AM : ERROR SAMA: Failed to parse data
 #+end_example
 
-In the BIN file, you will see "Data parsing fail" in the error column for the
-Samamet.
+The error message will also appear in the log file, under the "SAMA" section in
+the errors column, with the message "Parsing fail".
 
-In the event of repeated corrupted or incomplete data from the Samamet, it is
-possible that the connection between Samamet and the autopilot could be
-experience interference or simply a partially incomplete connection.
-
+While possible, it is unlikely that a parsing error will come from a corrupted
+or incomplete message, since the message frame verification and checksum
+verification will catch the majority of the corrupted or incomplete messages. It
+is more likely that ~parse_data()~ has been edited and there is a bug with
+either the regexes or with how the function performs data extraction.
 
 * Code Overview
-Over view of the ~serial_pth.lua~ script for decoding and logging data from the
-PTH serial sensor
-
 #+begin_quote
-*NOTE*: This document is in the order that the code is ran, not in the order
-that it is organized in the file.
+*Note*:
+  1. The majority of the comments were removed from the code snippets for
+     both clarity and brevity.
+  2. While the Samamet does not technically follow the NMEA-0183 message
+     standard, its message structure is nearly identical, which means we will
+     verify message frames and decode messages in the same manner we would a
+     NMEA-0183 message.
 #+end_quote
-
-** Global Variables
+** Global Variables and Constants
 #+begin_src lua
--- variable to count iterations without getting message
-local loops_since_data_received = 0
+local BAUD_RATE = 9600
 
--- table to hold the message that is currently being assembled
-local message_table = {}
+local MAX_MESSAGE_LENGTH = 60
 
--- error type table
+-- Return rate and calculations
+local SCHEDULE_RATE = 100 --milliseconds
+local TIME_BETWEEN_DATA = 1000 --milliseconds
+assert((SCHEDULE_RATE < TIME_BETWEEN_DATA), "SAMA Loop reschedule rate to long")
+local LOOPS_TO_FAIL = (TIME_BETWEEN_DATA // SCHEDULE_RATE) + (1)
+
 local ERROR_LIST = {
-  "No data received",      -- 1
-  "Checksum fail",         -- 2
-  "Data parsing fail",     -- 3
+  no_data       = "No data received",
+  checksum      = "Checksum fail",
+  parsing       = "Parsing fail",
+  invalid_frame = "Invalid frame",
 }
+
+local MESSAGE_INFO = {
+  ["UKPTH"] = {
+    length = 60,
+    fields = 12,
+    measurements = 5
+  }
+}
+
+local loops_since_data_received = 0
 #+end_src
 
-The ~loops_since_data_received~ variable stores how many loops since a new byte
-of data has been received on the serial line. If this value goes above a certain
-count, we can assume that the sensor is most likely disconnected, and can report
-and log an error
+We start by initializing all of our global constants and variables. Note that
+all constants are in all caps, while global variables are all lower case like
+the other variables present in the script.
 
-The ~message_table~ table stores the bytes of the message that we are currently
-assembling.
+~BAUD_RATE~ defines the baud rate of the Samamet, in this case it is 9600. This
+is used during the serial initialization.
 
-The ~ERROR_LIST~ table holds a list of possible errors we can receive. We use
-this list to pass through the kind of error we are experiencing to the
-~log_error()~ function to be logged in the BIN file for later reference.
+~MAX_MESSAGE_LENGTH~ defines the maximum length (in bytes/characters) of the
+messages we will receive from the Samamet. We use this in the ~update()~
+function when we read data from the serial line.
+
+~SCHEDULE_RATE~ defines how long do we want to wait in milliseconds before
+rerunning the ~update()~ function.
+
+~TIME_BETWEEN_DATA~ defines the time between data transmissions from the sensor,
+in milliseconds. We use this and the ~SCHEDULE_RATE~ number to calculate the
+~LOOPS_TO_FAIL~ value. We use this when determining if the sensor is
+disconnected. We also verify that ~SCHEDULE_RATE~ is less than
+~TIME_BETWEEN_DATA~ to ensure that the script is rescheduled fast enough to
+ensure that it can keep up with the flow of messages from the Samamet.
+
+The ~ERROR_LIST~ table holds a set of key-value pairs which correspond to the
+different kinds of errors that can be experienced. These are referenced when
+using the ~log_error()~ function to pass in the string we would like to log for
+the error message. *Note*: all of the string in the ~ERROR_LIST~ table must be
+16 character (bytes) or less to be properly logged.
+
+The ~MESSAGE_INFO~ table holds a set of key-value pairs which map the message
+headers that we expect and would like to decode to a table of information about
+the message. Specifically it holds the length of the message, the number of
+fields that are in the message, and the number of measurements that are in the
+message. This table gets referenced when parsing the data from the message to
+ensure that the data was successfully extracted. In our case we only decode one
+message.
+
+The ~loops_since_data_received~ variable holds the amount of loops we have gone
+through since we have received any new data. This is incremented once every loop
+without data, and is compared with the ~LOOPS_TO_FAIL~ value before we log an
+error.
 
 ** Serial Initialization
 #+begin_src lua
--- initialize serial connection
-local BAUD_RATE = 9600
-
--- find the serial first (0) scripting serial port instance
--- SERIALx_PROTOCOL 28
 local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port")
-
--- begin the serial port
 PORT:begin(BAUD_RATE)
 PORT:set_flow_control(0)
 #+end_src
 
-This sets up the serial connection between the PTH and the flight controller.
-A baud rate of 9600 is used since this is the speed the sensor operates at.
+To initialize the serial connection, we call the ~find_serial()~ method, which
+will find a scripting serial port instance. In the code snippet above, we call
+~serial:find_serial(0)~, which will look for the first instance of a scripting
+enabled serial port. If you have multiple scripting serial ports, you can change
+the argument of the ~find_serial()~ from a =0= to a =1=, which will look for the
+second scripting enables serial port, as opposed to the first.
 
-After we set the baud rate, we then find the first serial port that is currently
-open and using protocol 28, which is the ArduPilot protocol for scripting.
+If we do not find a serial port that has scripting enabled, we throw an error to
+alert the user that the autopilot has not been properly set up to use the
+sensor.
 
-#+begin_quote
-*NOTE*:
-1. make sure to set the correct baud rate of 9600 and protocol 28 on the serial
-   line being used to ensure the sensor is connected.
-2. If you have multiple serial ports set to protocol 28 (Scripting), make sure
-   to have the Samamet on the highest port, or to set the =0= in ~find_serial()~
-   to a =1= to find the second port.
-#+end_quote
-
-If we cannot find a serial port with the scripting protocol, the script throws
-an error.
-
-The serial initialization is pulled from the ArduPilot [[https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Scripting/examples/Serial_Dump.lua][Serial Dump example]].
+After finding the serial port, we store the interface in the ~PORT~ variable. To
+start the connection, we call the ~begin()~ method and pass in the ~BAUD_RATE~
+constant that we defined earlier. We also disable UART flow control with the
+~set_flow_control()~ method, since the Samamet does not support it.
 
 ** Update Function
-Once the serial initialization is completed, the script then jumps to the end
-of the file (since that there is no other code outside of the functions) and
-runs the following return statement.
+Once the constants are defined and serial initialization is completed, the
+script then jumps to the end of the file (since that there is no other code
+outside of the functions) and runs the following return statement.
 
 #+begin_src lua
 return update() -- run immediately before starting to reschedule
 #+end_src
 
-This statement calls the ~update()~ function, which is the main function in most
-ArduPilot lua scripts.
+This statement calls the ~update()~ function, which is the main driver function
+in this script.
 
 #+begin_src lua
+function update()
   local n_bytes = PORT:available()
 
-  -- If we have received no bytes or have not received any new bytes, increment
-  -- the count of loops without data. If it reaches 11 or more
-  -- (100ms * 11 = 1.1sec), then log an error.
   if n_bytes <= 0 then
     loops_since_data_received = loops_since_data_received + 1
-    if loops_since_data_received >= 11 then
-      log_error(ERROR_LIST[1])
-      -- Send error message to mission planner with priority 0 (error)
-      gcs:send_text(0, "ERROR: PTH has failed to send data")
-      -- clear incomplete message (if there is one)
-      message_table = {}
+    if loops_since_data_received >= LOOPS_TO_FAIL then
+      log_error(ERROR_LIST.no_data)
+      gcs:send_text(0, "ERROR SAMA: Disconnected Sensor")
     end
-    return update, 100
+    return update, SCHEDULE_RATE
   end
 #+end_src
 
-First we update ~n_bytes~ and we check if it is zero. If it is zero, this means
-that there is no new data on the bus, meaning the sensor is disconnected, or it
-has not sent its data yet.
-
-Since we run the loop ten times per second we keep track of how many loops have
-gone by with the ~loops_since_data_received~ counter. If we reach eleven or more
-iterations without new data, we log an error with the ~log_error()~ function
-(This will be discussed further in the [[#logging]["Logging"]] section), send an error out to
-the Mission Planner output, and clear the current message that has been parsed
-in the event that the sensor was disconnected in the middle of a data
-transmission.
-
-We derive this number of failed loops from how often we schedule the ~update()~
-function to run, which is every 100 milliseconds, and how often the PTH sends
-out its data, which is every second. To ensure that we are not flagging the time
-in between data transmissions from the sensor as an error, we need to wait more
-than one second. By waiting for eleven failed loops, we guarantee that we are
-waiting at least 1.1 seconds before we log an error ($100\text{ms} \cdot 11 =
-1100 = 1.1\text{sec}$). This gives the PTH time to send its data and will
-prevent us from logging any false errors.
-
+For every iteration we first start by checking how many bytes are available in
+the serial queue by using the ~available()~ method for the serial interface. We
+then check if that value is zero. If it is this means that the Samamet has not
+sent any data yet. We then add one to the ~loops_since_data_received~ variable,
+and check if the value is over the ~LOOPS_TO_FAIL~ limit. If it is, we then log
+an error to the log file, and send an error message to Mission Planner.
 
 #+begin_src lua
-  -- read bytes from the serial line until we hit '0x0A' which is <LF>, the
-  -- ending of the message. Then process the message
+  local message_string = PORT:readstring(MAX_MESSAGE_LENGTH)
+
+  if (message_string == nil or #message_string <= 0) then
+    return update, SCHEDULE_RATE
+  end
+
   loops_since_data_received = 0
-  while n_bytes > 0 do
-    local byte = PORT:read()
-    if byte == 0x0A then
-      -- ommited for later section
-    end
-    table.insert(message_table, byte)
-    n_bytes = n_bytes - 1
-  end
 
-  return update, 100 -- schedule the update function to
+  if not (verify_valid_frame(message_string)) then
+    PORT:readstring(PORT:available():toint())
+    log_error(ERROR_LIST.invalid_frame)
+    gcs:send_text(0, "ERROR SAMA: Invalid message frame")
+    gcs:send_text(7, message_string)
+    return update, SCHEDULE_RATE
+  end
 #+end_src
 
-If there are any bytes available, we read one off of the serial line. We first
-check if it is the ASCII character =0x0A=, which is the 'line feed' or =<LF>=
-character, which is that character that the Samamet uses to signify the end of a
-message. If the current bytes is not the line feed character, we simply add the
-byte to ~message_table~ and repeat the loop again if there are any more bytes in
-the queue.
+If we have received data from the Samamet, we call the ~readstring()~ method on
+the serial interface to get a string that is at most ~MAX_MESSAGE_LENGTH~ bytes
+long.
+
+To prevent a situation where ~readstring()~ returns ~nil~ value or an empty
+string and we try to parse the data, we simply check for both of these
+conditions, and reschedule the function if either of them are true.
+
+#+begin_quote
+Instead of reading each byte individually off of the serial line, and checking
+to see if we have reached the end of a message, we simply pull the max message
+length that we are expecting from the sensor off the serial line each time.
+
+If we are parsing and logging the data fast enough, and are rescheduling the
+loop often enough, we will only have one message in the queue at a time. Which
+means even if the current message in the queue is shorter than the maximum
+message length, we will not pull parts of another message, since there is no
+second message in the queue
+#+end_quote
+
+After we have passed the first initial checks to make sure we have received a
+message, we then can call the ~verify_valid_frame()~ function, which will take
+in the message string, and check for the NMEA-0183 sentence start and ending
+characters. Which are "~$~" and =<CR><LF>= respectively. If the function does
+not find both of these, it will return false. If the function does return false,
+we know that either we have a corrupt or incomplete message, or we have read the
+parts of two separate messages.
+
+We first clear the serial queue by reading the rest of available bytes into a
+string, and doing nothing with them. This will "re-align" the serial queue to
+ensure that the first byte we read will be the start of the sentence, and that
+there are no messages in the queue to ensure we do not read a part of the second
+message.
+
+We then log an error to the autopilot's log file with the ~log_error()~ method.
+Which takes a 16 byte string as its input, which we pull from the ~ERROR_LIST~,
+using the ~invalid_frame~ key to pass in the desired string. We also send an
+error to the Mission Planner output, specifying what sensor is having the error,
+and what king of error we are experiencing. We then return and reschedule the
+update function to run again in ~SCHEDULE_RATE~ milliseconds.
 
 #+begin_src lua
-    if byte == 0x0A then
-      table.insert(message_table, byte)
-      local message_string = string.char(table.unpack(message_table))
-      if not (verify_checksum(message_string)) then
-        log_error(ERROR_LIST[2])
-        gcs:send_text(0, "ERROR: PTH Data failed checksum")
-        message_table = {}
-        return update, 100
-      end
-      if not (parse_data(message_string)) then
-        log_error(ERROR_LIST[3])
-        gcs:send_text(0, "ERROR: Failed to parse data")
-        message_table = {}
-        return update, 100
-      end
-      -- reset for the next message
-      message_table = {}
-      return update, 100
-    end
+  if not (verify_checksum(message_string)) then
+    log_error(ERROR_LIST.checksum)
+    gcs:send_text(0, "ERROR SAMA: Data failed checksum")
+    gcs:send_text(7, message_string)
+    return update, SCHEDULE_RATE
+  end
 #+end_src
 
-If we find that the byte we read is in fact the line feed character, we know we
-have a full message we can decode.
+If we have received a valid frame from the Samamet, we can now verify the
+checksum of the message.
 
-First we verify that the checksum provided with the message, is correct. This
-occurs in the ~verify_checksum()~ function, the specifics of which will be
-discussed later in the [[#verifying-checksum]["Verifying Checksum"]] section.
+Here I will give general explanation on how the checksum is calculated and
+verified. The specifics of how the ~verify_checksum()~ works will be discussed
+in the [[#verifying-checksum]["Verifying Checksum"]] section.
 
-Below is the message format of the PTH sensor. At the end of the message, after
-the asterisk, is a two digit hexadecimal number, represented as a string. This
-is the checksum of the message.
+Below is an example of one of the messages that the Samamet can send, which is
+in a format nearly identical to the NMEA-0183 message standard. At the end of
+the message, after the asterisk, is a two digit hexadecimal number, represented
+as a string. This is the checksum of the message.
 
 #+begin_example
 $UKPTH,000E,098152.5,Pa,23.17,C,22.90,C,42.21,%,22.45,C*4A<CR><LF>
@@ -300,38 +381,33 @@ $UKPTH,000E,098152.5,Pa,23.17,C,22.90,C,42.21,%,22.45,C*4A<CR><LF>
 
 #+begin_comment
 *NOTE*: The end of the message has the standard DOS (Windows) line ending of a
-carriage return and a line feed, (shown as <CR> and <LF>). This makes the
-message overall 60 characters (bytes), despite there being only 58 visible
-characters.
+carriage return and a line feed, (shown as <CR> and <LF>), but are considered
+whitespace characters. Which means in most user interfaces they are invisible.
+When counting the number of characters in a message, or when dealing with the
+length of a message do not forget that these characters are present in the
+message.
 #+end_comment
 
-To calculate the checksum from the message, we take the "main body" of the
-message, that is the text inside, but *NOT INCLUDING* the "~$~" and "~*~". The main
-body of the message can be seen below.
+To calculate the checksum from the message, we first take the "main body" of the
+message, that is the text inside, but *NOT INCLUDING* the "~$~" and "~*~". The
+"main body" of the message can be seen below.
 
 #+begin_example
 UKPTH,000E,098152.5,Pa,23.17,C,22.90,C,42.21,%,22.45,C
 #+end_example
 
 Once we have the "main body" of the message, we can now calculate the checksum.
-As per the documentation for the sensor:
-
-#+begin_quote
-The checksum was calculated as the bit-wise exclusive OR of all 8-bit ASCII
-characters between, but not including, ‘$’ and ‘*’ and displayed as a 2-digit
-hexadecimal number
-#+end_quote
+For the NMEA-0183 standard, we calculate the checksum by performing a bitwise
+exclusive OR (XOR) of all of the characters that are in the "main message", not
+including the "~$~" and "~*~".
 
 An explanation of the exclusive OR operation (XOR) can be found [[https://en.wikipedia.org/wiki/Exclusive_or][here]].
 
-We take each of the 8-bit ASCII characters in the "main body" of the message
-string, and successively XOR each character with the next one.
-
 In the example above, we start out with the ASCII character =U=. We then XOR =U=
-with the next character in the string, =K=. After we XOR these two characters
-together, we take the result of this operation, and then XOR it with the next
-character in the messsage, in this case =P=. We then repeat this process until
-we reach the end of the string.
+with the next character in the string, which happens to be =K=. After we XOR
+these two characters together, we take the result of this operation, and then
+XOR it with the next character in the message, in this case =P=. We then repeat
+this process until we reach the end of the string.
 
 Once we calculate the checksum from the message, we can now verify if the
 message is valid. We do this by comparing the value of the checksum we
@@ -339,63 +415,96 @@ calculated, to the checksum sent with the message. If the two values do not
 match, we know that the data contained within the message, or the checksum bytes
 themselves, are corrupted in some manner.
 
-If we find that the checksum is invalid, we report this error to Mission Planner,
-call ~log_error()~ to log an error in the BIN file, and clear ~message_table~.
-
-Once the data is verified, we can begin parsing and logging the data. The
-specifics will be discussed further in the [[#logging]["Logging"]] and [[#parsing-data]["Parsing Data"]]
-sections.
-
-We start by extracting the "main body" of the message into a string. We then
-take each section of the message, which is delimited by commas, and place them
-into a table.
-
-Once we have a table of all of the sections in the message, we then can then
-extract the data sections and place them into their own table.
-
-We then pass this new table of just data values to the ~log_data()~ function,
-which logs the data to the BIN file with names for each piece of data, and
-their appropriate units.
-
-If the ~log_data()~ function detects that the input table does not meet the
-required size of 5 elements, it will return false, and not log the data.  the
-~parse_data()~ returns the return value of ~log_data()~ to ~update()~.
-
-When ~parse_data()~ returns false in the above case, or the other cases the
-function can detect, ~update()~ reports to Mission Planner that the data
-was not successfully, logs an error, and resets the message table.
-
-If both ~verify_checksum()~ and ~parse_data()~ return true, the data that was
-read from the serial line was successfully logged. We can now clear the message
-table for the next message and continue to reschedule the ~update()~ function to
-read the next message.
+If we find that the checksum is invalid, we report this error to Mission
+Planner, call ~log_error()~ to log an error in the BIN file, and return and
+reschedule the ~update()~ function.
 
 #+begin_src lua
-  return update, 100 -- reschedules the loop every 100ms
+  if not (parse_data(message_string)) then
+    log_error(ERROR_LIST.parsing)
+    gcs:send_text(0, "ERROR SAMA: Failed to parse data")
+    gcs:send_text(7, message_string)
+    return update, SCHEDULE_RATE
+  end
 #+end_src
 
-Here we schedule the update function to return every 100 milliseconds. We
-schedule the loop to run significantly faster that what the Samamet to prevent
-cases where we receive more than one message for each run of the ~update()~
-function. Receiving more than one message causes us to log the messages that
-were recorded around a second apart, but in the log file, show to be around only
-three milliseconds apart. To prevent this we simply schedule the loop to run
-faster than the sensor sends out its data, and perform some simple checks (that
-were discussed earlier) to prevent any false errors from being logged.
+Now that we have passed all of the checks, we can now begin to parse and log the
+message.
+
+Again, I will be giving a general overview of how parsing and logging works,
+while more specific explanations will be in the [[#logging]["Logging"]] and [[#parsing-data]["Parsing Data"]]
+sections.
+
+We start by extracting the "main body" of the message, which contains all of the
+fields of the message. We then take each field or section of the message, which
+is delimited by commas, and place them into a table.
+
+After we have all of the fields in a table, we then iterate over the table,
+looking at each of the fields to see if they contain a floating point number. If
+they are, we store them in a separate measurements table.
+
+Once we have the measurements from the message, we verify that we parsed all of
+the measurements we are expecting from this message, and then send the
+measurements to the ~log_data()~ function.
+
+In the logging function, we define the measurement section that will appear in
+the log file, which is "SAMA" in this case. We also define all of the data
+fields that we would like to record. For the Samamet, this includes the
+pressure, humidity, the three temperature sensors, and the error state.
+
+If there were any errors in extracting the fields or the measurements from the
+message, or if there was an issue in the logging process, we log an error in the
+log file, and send an error to the Mission Planner output.
+
+#+begin_src lua
+  return update, SCHEDULE_RATE
+end
+#+end_src
+
+After we have logged the data into the log file, we can now reschedule the
+~update()~ function to run again in ~SCHEDULE_RATE~ milliseconds. After that
+amount of time, the loop will run again, processing the next message.
+
+** Verifying Valid Frame
+
+#+begin_src lua
+function verify_valid_frame(message_string)
+  local head = string.sub(message_string, 1, 1)
+  local tail = string.sub(message_string, #message_string-1, #message_string)
+
+  if (head == "$") and (tail == "\r\n") then
+    return true
+  end
+  return false
+end
+#+end_src
+
+To verify that we have a valid NMEA-0183 message frame, we need to check if we
+have the standard sentence starting and ending characters for NMEA-0183
+messages, being "=$=" and "=<CR><LF>=" respectively.
+
+To get these characters, we simply use the ~string.sub()~ method to extract the
+sub-strings that contains the sentence delimiters. In ~strings.sub()~, we
+specify the string we are going to be working on, and then we pass in the
+starting and ending indices of the sub-string we want (The sub-string indices
+are inclusive). For the "head", we simply take the first character in the
+string. For the "tail", we specify the last two indices of the string, which if
+the message is valid, will contain the two ending characters.
+
+We then take the sub-strings and verify that they do contain the starting and
+ending characters. If both sets are present, we return true to the caller. If
+one or both of the sub-strings do not match their respective sentence
+delimiters, we return false.
 
 ** Verifying Checksum
-
-#+caption: Snippet of the ~verify_checksum()~ function, with comments removed.
 #+begin_src lua
 function verify_checksum(message_string)
   local data_string = message_string:match("%$(.*)%*")
-
   if data_string == nil then
     return false
   end
 
   local incoming_checksum = message_string:match("%*([0-9A-F][0-9A-F])")
-
   if incoming_checksum == nil then
     return false
   end
@@ -408,20 +517,19 @@ function verify_checksum(message_string)
     checksum = (checksum ~ string_bytes[i])
   end
 
-  -- check if checksum matches, return true or false
   return (checksum == incoming_checksum)
 end
 #+end_src
 
 We first take the message string and perform a regular expression (regex or
-regexp) match on the string. Here the Lua regex "~%$(.*)%*~" first looks for a
+regexp) match on the string. Here the Lua regex "=%$(.*)%*=" first looks for a
 "~$~", once it finds one, it then matches any characters after the "~$~" up
 until it finds a "~*~". This extracts the main body of the message, which
 contains the data that we need to process for logging. An example of a full
 message can be seen below.
 
 #+begin_example
-$UKPTH,000E,098152.5,Pa,23.17,C,22.90,C,42.21,%,22.45,C*4A<CR><LF>
+$UKPTH,000E,098152.5,Pa,23.17,C,22.90,C,42.21,%,22.45,C*4A
 #+end_example
 
 Before we continue, we check if the regex failed, if it has, it will have
@@ -429,7 +537,7 @@ returned a value of ~nil~. We check for this, and if this is true, we return
 false for the caller to handle.
 
 We then perform another regex on the message string again to extract the
-checksum. The regex "~%*([0-9A-F][0-9A-F])~" first finds a "~*~". After it finds
+checksum. The regex "=%*([0-9A-F][0-9A-F])=" first finds a "~*~". After it finds
 one, it then matches exactly two characters. Since we are matching for a
 hexadecimal number, the regex will only accept characters in hexadecimal
 numbers. This includes all digits between zero and nine, and all capital version
@@ -439,10 +547,10 @@ Once we have extracted the checksum, we verify that the regex was successful by
 making sure the resulting string is not ~nil~. If it is ~nil~, we return false
 for the caller to handle.
 
-If we successfully extraced the checksum value, we then need to convert it to an
-integer since we cannot compare the string directly with the checksum value we
-will calculate later. To do this we call the ~tonumber()~ function. We pass in
-the string we want convert to a number, and the base of the number we are
+If we successfully extracted the checksum value, we then need to convert it to
+an integer since we cannot compare the string directly with the checksum value
+we will calculate later. To do this we call the ~tonumber()~ function. We pass
+in the string we want convert to a number, and the base of the number we are
 passing in. In this case with a hexadecimal number, we specify =16=.
 
 Now that we have extracted the main message body and the incoming checksum, we
@@ -467,7 +575,7 @@ braces to take all of the ASCII values of the characters in the string and place
 them in a table.
 
 Once we have done that we can finally calculate the checksum. As mentioned
-before.  We calculate the checksum by simply XORing each character with the
+before. We calculate the checksum by simply XORing each character with the
 result of the previous XOR operation.
 
 Once we have calculated the checksum, we compare it with the incoming checksum.
@@ -485,77 +593,92 @@ For making patterns and regular expressions in Lua, you can use these web tools:
 - [[https://montymahato.github.io/lua-pattern-tester/][Lua Pattern Tester]]
 
 ** Parsing Data
-
-#+caption: Snippet of the ~parse_data()~ function
 #+begin_src lua
 function parse_data(message_string)
   local data_string = message_string:match("%$(.*)%*")
-
   if data_string == nil then
     return false
   end
 
-  local data_table = {}
+  local message_type = message_string:match("%$(.-),")
+  if message_type == nil then
+    return false
+  end
 
+  local data_table = {}
   for str in string.gmatch(data_string, "([^" ..",".. "]+)") do
     table.insert(data_table, str)
   end
 
-  if #data_table ~= 12 then
+  if #data_table ~= MESSAGE_INFO[message_type].fields then
     return false
   end
 
-  local measurements_table={}
-  for i=3,12,2 do
-    table.insert(measurements_table, data_table[i])
+  local measurement_table={}
+  for i = 1, #data_table do
+    local m = string.match(data_table[i], "%d*%.%d*")
+    if m ~= nil then
+      table.insert(measurement_table, m)
+    end
   end
 
-  -- report data to Mission Planner, not necessary all the time
-  -- (OMMITED HERE FOR BREVITY)
+  if #measurement_table ~= MESSAGE_INFO[message_type].measurements then
+    return false
+  end
+-- report data to Mission Planner, not necessary all the time
+  gcs:send_text(7, "p:"  .. string.format(" %.1f  ", measurement_table[1])  ..
+                   "t1:" .. string.format(" %.1f  ", measurement_table[2])  ..
+                   "t2:" .. string.format(" %.1f  ", measurement_table[3])  ..
+                   "h:"  .. string.format(" %.1f  ", measurement_table[4])  ..
+                   "t3:" .. string.format(" %.1f", measurement_table[5])
+  )
 
-  return log_data(measurements_table)
-
+  return log_data(measurement_table)
 end
 #+end_src
 
 We first take the message string and perform a regular expression (regex or
-regexp) match on the string. Here the Lua regex "~%$(.*)%*~" first looks for a
+regexp) match on the string. Here the Lua regex "=%$(.*)%*=" first looks for a
 "~$~", once it finds one, it then matches any characters after the "~$~" up
 until it finds a "~*~". This extracts the main body of the message, which
 contains the data that we need to process for logging. An example of a full
 message can be seen below.
 
 #+begin_example
-$UKPTH,000E,098152.5,Pa,23.17,C,22.90,C,42.21,%,22.45,C*4A<CR><LF>
+$UKPTH,000E,098152.5,Pa,23.17,C,22.90,C,42.21,%,22.45,C*4A
 #+end_example
 
 Before we continue, we check if the regex failed, if it has, it will have
 returned a value of ~nil~. We check for this, and if this is true, we return
 false for the caller to handle.
 
+We then extract the message header with the regex "~%$(.-),~", which will
+extract the first field in the message, we will use this later in the function.
+We also verify that regex worked by checking if the value is ~nil~.
+
 After we match the main body of the message, we can start preparing to extract
-the date from it. First we initialize the ~data_table~ table, which is where
-we will store each of the messages sections for processing.
+the data from it. First we initialize the ~data_table~ table, which is where we
+will store each of the messages sections for processing.
 
 Next we perform another regex on the message body. Here the regex
-"~([^" ..",".. "]+)~", or more simply written as "~([^,]+)~" takes the string,
-and matches every character up until it finds a ",". It does this for all
-of the segments in the string. We then use the for loop to iterate over all of
-these segments and place them into are previously defined ~data_table~.
+"=([^" ..",".. "]+)=", or more simply written as "~([^,]+)~" takes the string,
+and matches every character up until it finds a ",". It does this for all of the
+segments in the string. We then use the for loop to iterate over all of these
+segments and place them into are previously defined ~data_table~.
 
-We then check the size of ~data_table~ to ensure it got all twelve segments we
-are expecting, if not, we return false for the caller to handle.
+We then check the size of ~data_table~, and make sure it matches up with the
+number of fields that we know are present in the message we are parsing. In our
+case the "UKPTH" message has twelve fields. If we find that this is not true, we
+return false for the caller to handle.
 
-We then take the measurement values from ~data_table~ and place them into a
-new table called ~measurements_table~.
+We then iterate over ~data_table~ checking each value and seeing if it matches
+with the regex "=%d*%.%d*=", which accepts any floating point number. We then
+place any matches
 
-After we have extracted the measurement values, we can optionally send the
-values to the Mission Planner output, but is not required for the script to
-function.
-
-Finally we call ~log_data~ and pass in the ~measurements_table~ as an argument.
-~log_data()~ returns true or false depending on whether the table is the correct
-size. We then return this boolean value to the caller for them to handle.
+Finally we call ~log_data()~ and pass in the ~measurements_table~ as an
+argument. The log function returns true or false depending on whether the table
+is the correct size. We then return this boolean value to the caller for them to
+handle.
 
 For information on Lua's regular expressions, you can view these pages:
 - [[https://www.lua.org/pil/20.1.html][Pattern-Matching Functions]]
@@ -568,22 +691,23 @@ For making patterns and regular expressions in Lua, you can use these web tools:
 ** Logging
 *** Logging Data
 
-#+caption: Snippet of the ~log_data()~ function, with comments removed.
 #+begin_src lua
-function log_data(measurements_table)
-  if #measurements_table ~= 5 then
+function log_data(measurement_table)
+  -- check if we have the expected number of measurements
+  if #measurement_table ~= MESSAGE_INFO["UKPTH"].measurements then
     return false
   end
+
   logger:write('SAMA', 'pres,temp1,temp2,hum,temp3,error',
                'NNNNNN',
                'POO%O-',
                '------',
-               measurements_table[1],
-               measurements_table[2],
-               measurements_table[3],
-               measurements_table[4],
-               measurements_table[5],
-               "Normal")
+               measurement_table[1],
+               measurement_table[2],
+               measurement_table[3],
+               measurement_table[4],
+               measurement_table[5],
+               'Normal')
   return true
 end
 #+end_src
@@ -591,34 +715,37 @@ end
 Above is the ~log_data()~ function. This function takes in a table as an
 argument.
 
-The function first checks if the table that is passed to it is the correct size,
-in this case 5, as that is the number of sensors on the PTH. If it does not pass
-this check, ~log_data()~ returns a =false= value, which is processed by the
-caller.
+The function first checks if the table that is passed to it is the correct size.
+We do this by referencing the ~MESSAGE_INFO~ table. For the "UKPTH" message, we
+are expecting 5 measurements. If it does not pass this check, ~log_data()~
+returns a false value, which is processed by the caller.
 
 If the table passes this check, we then write the data to the BIN file.
 
-The ~logger:write~ method take several arguments to define the various
+The ~logger:write()~ method take several arguments to define the various
 parameters that go into the log file.
 
 The first argument, '=SAMA=', is the section name for the data we are going to
 log in the file. This name has to be at most 4 characters, and cannot be the
 same as any other section name that ArduPilot logs. The second argument,
 '=pres,temp1,temp2,hum,temp3,error=', specifies the name of each piece of data
-logged.  These labels are stored under the section name in the log file, in
-total these names cannot exceed 64 characters.
+logged. These labels are stored under the section name in the log file, in total
+these names cannot exceed 64 characters.
 
 The third argument, '=NNNNNN=', specifies the type of each label. In this case
 '=N=', specifies a =char[16]=, which is a string of a maximum of 16 characters.
+
 The fourth and fifth arguments specify the units and the multiplier of each of
 the units respectively. In the fourth argument '=P=' represents Pascals, for the
 pressure measurement, '=O=' represents degrees Celsius, for the temperature
 measurements, and '=%=' for percentage, for the humidity measurements, and '=-='
-for no units/string for the error column. For the fifth argument, the '=-='
-specifies that we want no multiplier applies to our data.
+for no units/string for the error column.
 
-Further explanations on the format, unit, and multiplier types can be
-found [[https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Logger/README.md][here]].
+For the fifth argument, the '=-=' specifies that we want no multiplier applies
+to our data.
+
+Further explanations on the format, unit, and multiplier types can be found
+[[https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Logger/README.md][here]].
 
 Once we specify the parameters for the data that is going to be logged, we then
 pass in the data we would like to log in the file. In this case, we use the 5
@@ -635,7 +762,6 @@ successful so we can only assume that it wrote to the BIN file correctly.
 
 *** Logging Errors
 
-#+caption: The ~log_error()~ function, with comments removed.
 #+begin_src lua
 function log_error(error_type)
   logger:write('SAMA', 'pres,temp1,temp2,hum,temp3,error',
@@ -646,7 +772,7 @@ function log_error(error_type)
 end
 #+end_src
 
-The ~log_errors()~ is very similar to the ~log_data()~ function, the only
+The ~log_error()~ is very similar to the data logging function, the only
 difference is that instead of writing any specific data, we simply write zeros
 to the log file, and log the type of error as a string (which will originate
 from the ~ERROR_LIST~ table). We do this as it is very obvious in the log file
@@ -669,32 +795,28 @@ itself, assuming the script can handle the error, the script can continue
 logging without having to land a drone and restart the script, which is vital
 for long and important flights.
 
-
-#+latex: \newpage
 * Important Links
 Below is a list of the URLs linked to in the document in case that the
 hyperlinks are not usable or reachable, such as if the document is printed on
 paper.
 
-1. ArduPilot Serial Dump Example
-   + https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Scripting/examples/Serial_Dump.lua
-2. Exclusive OR Wikipedia Article
+1. Exclusive OR Wikipedia Article
    + https://en.wikipedia.org/wiki/Exclusive_or
-3. Formatting, Units, and Multipliers in ArduPilots Logging System
+2. Formatting, Units, and Multipliers in ArduPilot's Logging System
    + https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Logger/README.md
-4. ArduPilot adding a new log message
+3. ArduPilot adding a new log message
    + https://ardupilot.org/dev/docs/code-overview-adding-a-new-log-message.html
-5. Lua Pattern-Matching Functions
+4. Lua Pattern-Matching Functions
    + https://www.lua.org/pil/20.1.html
-6. Lua Pattern Matching
+5. Lua Pattern Matching
    + https://riptutorial.com/lua/example/20315/lua-pattern-matching
-7. Lua Patterns Viewer
+6. Lua Patterns Viewer
    + https://gitspartv.github.io/lua-patterns/
-8. Lua Pattern Tester
+7. Lua Pattern Tester
    + https://montymahato.github.io/lua-pattern-tester/
-9.  Supported log file data types
+8.  Supported log file data types
    + https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Logger/README.md
-10. ~logger:write()~ method documentation
+9. ~logger:write()~ method documentation
     + https://ardupilot.org/dev/docs/code-overview-adding-a-new-log-message.html
 
-#  LocalWords:  ArduPilot Lua regexes Samamet Samamet's
+#  LocalWords:  ArduPilot Lua regexes Samamet Samamet's ArduPilot's
