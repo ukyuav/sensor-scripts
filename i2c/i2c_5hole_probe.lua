@@ -7,11 +7,13 @@ sensors with the same addresses to record pressure data from a 5 hole pitot tube
 probe onto the drone's autopilot for turbulence data collection
 
 Author: Ryan Prince | Last Updated By: Justin Tussey
-Last Updated: 2024-06-10
+Last Updated: 2024-06-25
 
 ]] --
 
 -- Global Constants --
+
+local SCHEDULE_RATE = 50 -- milliseconds
 
 -- init i2c bus
 -- Get interface at bus 0 (first I2C bus) and set device address to 0x0
@@ -40,10 +42,12 @@ local CHANNEL_NUMBERS = {
 }
 
 -- error type table
+-- cannot be longer than 16 bytes
 local ERROR_LIST = {
-  "Sensor Disconnected (sensor fail)",          -- 1
-  "Failed to switch channel (multiplexer fail)" -- 2
+  disconnected  = "Sens disconnect",
+  select_fail   = "Fail tube switch"
 }
+
 
 -- 0x70 is default, to change, set or reset A0, A1, A2 on the multiplexer
 local TCA_ADDRESS = 0x70
@@ -110,7 +114,7 @@ function update()
     -- select channel i on TCA
     if not (tcaselect(value)) then
       gcs:send_text(0, "Error when selecting tube " .. tostring(key))
-      log_channel_error(key, ERROR_LIST[1])
+      log_channel_error(key, ERROR_LIST.select_fail)
     else
       -- open the address of the sensor
       I2C_BUS:set_address(SENSOR_ADDR)
@@ -121,7 +125,7 @@ function update()
       -- if there is no i2c device connected (or no data is read in general) log it as an error
       if (returnTable == nil) then
         gcs:send_text(0, "sensor disconnected, " .. " tube: " .. tostring(key))
-        log_channel_error(key, ERROR_LIST[2])
+        log_channel_error(key, ERROR_LIST.disconnected)
       else
 
         -- format data to remove first 2 bits
@@ -156,7 +160,7 @@ function update()
   I2C_BUS:set_address(0x00)
   log_data_list = {}
   error_list = {}
-  return update, 50 -- reschedules the loop every 50ms (20hz)
+  return update, SCHEDULE_RATE -- reschedules the loop every 50ms (20hz)
 end
 
 return update() -- run immediately before starting to reschedule
