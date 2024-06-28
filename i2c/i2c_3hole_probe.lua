@@ -1,13 +1,13 @@
 --[[
 
-I2C 5 Hole Probe w/ TCA9548 Multiplexer interface
+I2C 3 Hole Probe w/ TCA9548 Multiplexer interface
 
 This script uses an I2C multiplexer to communicate to multiple I2C pressure
-sensors with the same addresses to record pressure data from a 5 hole pitot tube
+sensors with the same addresses to record pressure data from a 3 hole pitot tube
 probe onto the drone's autopilot for turbulence data collection
 
 Author: Ryan Prince | Last Updated By: Justin Tussey
-Last Updated: 2024-06-25
+Last Updated: 2024-06-28
 
 ]] --
 
@@ -27,16 +27,14 @@ local I2C_BUS = i2c:get_device(0, 0)
 
 -- set the number of retries to 10
 I2C_BUS:set_retries(10)
-gcs:send_text(7, "i2c_5hole_probe Script Started!")
+gcs:send_text(7, "i2c_3hole_probe Script Started!")
 
 -- shared address of the sensors
 local SENSOR_ADDR = 0x28
 
 -- table of which channels on the multiplexer are being used
 local CHANNEL_NUMBERS = {
-  0,
   1,
-  2,
   3,
   4
 }
@@ -95,9 +93,9 @@ local function log_data()
   -- not all format types are supported by scripting only: i, L, e, f, n, M, B, I, E, and N
   -- Data MUST be integer|number|uint32_t_ud|string , type to match format string
   -- lua automatically adds a timestamp in micro seconds
-  logger:write('PRBE','tube1,tube2,tube3,tube4,tube5,err1,err2,err3,err4,err5','NNNNNNNNNN',
-               log_data_list[1], log_data_list[2], log_data_list[3], log_data_list[4], log_data_list[5],
-               error_list[1], error_list[2], error_list[3], error_list[4], error_list[5])
+  logger:write('PRBE','tube1,tube2,tube3,err1,err2,err3','NNNNNN',
+               log_data_list[1], log_data_list[2], log_data_list[3],
+               error_list[1], error_list[2], error_list[3])
 end
 
 -- write an error to the channel that is experience an error
@@ -143,18 +141,8 @@ function update()
 
   log_data()
 
-
   -- send_text(priority level (7 is Debug), text is formed dynamically from the function)
   gcs:send_text(7, form_message())
-
-  -- report data to mission planner output
-  -- gcs:send_text(7, "1 " .. string.format(": %.2f | ", log_data_list[1]) ..
-  --                  "2 " .. string.format(": %.2f | ", log_data_list[2]) ..
-  --                  "3 " .. string.format(": %.2f | ", log_data_list[3]) ..
-  --                  "4 " .. string.format(": %.2f | ", log_data_list[4]) ..
-  --                  "5 " .. string.format(": %.2f", log_data_list[5])
-  -- )
-
 
   -- reset everything for the next loop
   I2C_BUS:set_address(0x00)
@@ -164,4 +152,3 @@ function update()
 end
 
 return update() -- run immediately before starting to reschedule
-
