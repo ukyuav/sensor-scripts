@@ -5,12 +5,11 @@ Read the data from the serial line that the PTH is connected to, then decode the
 messages from it, and log the data to the autopilots BIN file.
 
 Author: Justin Tussey
-Last Updated: 2024-06-24
+Last Updated: 2024-06-25
 ]]--
 
 -- Global Constants
 
--- initialize serial connection
 local BAUD_RATE = 9600
 
 -- Max length of the messages from the Samamet
@@ -43,6 +42,7 @@ local MESSAGE_INFO = {
   }
 }
 
+-- initialize serial connection
 -- find the serial first (0) scripting serial port instance
 -- SERIALx_PROTOCOL 28
 local PORT = assert(serial:find_serial(0),"No Scripting Serial Port")

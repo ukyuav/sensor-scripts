@@ -9,12 +9,11 @@ Uses CV7-OEM Ultrasonic Wind Sensor from LCJ Capteurs
 Sends Data every 512 milliseconds, Baud rate of 4800
 
 Author: Justin Tussey
-Last Updated: 2024-06-24
+Last Updated: 2024-06-25
 ]]--
 
 -- Global Constants --
 
--- initialize serial connection
 local BAUD_RATE = 4800
 
 -- Max length of the messages from the anemometer
@@ -52,6 +51,7 @@ local MESSAGE_INFO = {
   -- }
 }
 
+-- initialize serial connection
 -- find the serial first (0) scripting serial port instance
 -- SERIALx_PROTOCOL 28
 local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port")
