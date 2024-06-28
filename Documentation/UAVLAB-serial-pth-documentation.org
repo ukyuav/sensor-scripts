@@ -1,6 +1,6 @@
 #+title: UAVLAB Serial Samamet (PTH) Script Documentation
 #+author: Justin Tussey
-#+date: 2024-06-24
+#+date: 2024-06-28
 #+options: toc:2
 
 #+begin_comment
@@ -11,21 +11,23 @@ https://github.com/jlacko/pandoc-latex-template <- the one I'm using
 https://github.com/Wandmalfarbe/pandoc-latex-template <- main link
 #+end_comment
 
-* Table of Contents :toc:
-- [[#hardware-setup][Hardware Setup]]
-- [[#error-messages-overview][Error Messages Overview]]
-  - [[#quick-reference-table][Quick Reference Table]]
-  - [[#explanation][Explanation]]
-- [[#code-overview][Code Overview]]
-  - [[#global-variables-and-constants][Global Variables and Constants]]
-  - [[#serial-initialization][Serial Initialization]]
-  - [[#update-function][Update Function]]
-  - [[#verifying-valid-frame][Verifying Valid Frame]]
-  - [[#verifying-checksum][Verifying Checksum]]
-  - [[#parsing-data][Parsing Data]]
-  - [[#logging][Logging]]
-  - [[#important-notes][Important Notes]]
-- [[#important-links][Important Links]]
+#+latex: \tableofcontents
+
+# * Table of Contents :toc:
+# - [[#hardware-setup][Hardware Setup]]
+# - [[#error-messages-overview][Error Messages Overview]]
+#   - [[#quick-reference-table][Quick Reference Table]]
+#   - [[#explanation][Explanation]]
+# - [[#code-overview][Code Overview]]
+#   - [[#global-variables-and-constants][Global Variables and Constants]]
+#   - [[#serial-initialization][Serial Initialization]]
+#   - [[#update-function][Update Function]]
+#   - [[#verifying-valid-frame][Verifying Valid Frame]]
+#   - [[#verifying-checksum][Verifying Checksum]]
+#   - [[#parsing-data][Parsing Data]]
+#   - [[#logging][Logging]]
+#   - [[#important-notes][Important Notes]]
+# - [[#important-links][Important Links]]
 
 * Hardware Setup
 
@@ -799,6 +801,7 @@ itself, assuming the script can handle the error, the script can continue
 logging without having to land a drone and restart the script, which is vital
 for long and important flights.
 
+#+latex: \pagebreak
 * Important Links
 Below is a list of the URLs linked to in the document in case that the
 hyperlinks are not usable or reachable, such as if the document is printed on

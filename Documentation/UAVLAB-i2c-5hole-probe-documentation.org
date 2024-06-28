@@ -1,6 +1,6 @@
 #+title:  I^{2}C 5 Hole Probe with a TCA9548 Multiplexer
 #+author: Justin Tussey
-#+date: 2024-06-12
+#+date: 2024-06-28
 #+options: toc:2
 
 #+begin_comment
@@ -11,15 +11,17 @@ https://github.com/jlacko/pandoc-latex-template <- the one I'm using
 https://github.com/Wandmalfarbe/pandoc-latex-template <- main link
 #+end_comment
 
-* Table of Contents :toc:
-- [[#error-messages-overview][Error Messages Overview]]
-  - [[#quick-reference-table][Quick Reference Table]]
-  - [[#explanation][Explanation]]
-- [[#code-overview][Code Overview]]
-  - [[#global-values-and-initialization][Global Values and Initialization]]
-  - [[#tca-channel-selecting][TCA Channel Selecting]]
-  - [[#logging][Logging]]
-  - [[#update][Update]]
+#+latex: \tableofcontents
+
+# * Table of Contents :toc:
+# - [[#error-messages-overview][Error Messages Overview]]
+#   - [[#quick-reference-table][Quick Reference Table]]
+#   - [[#explanation][Explanation]]
+# - [[#code-overview][Code Overview]]
+#   - [[#global-values-and-initialization][Global Values and Initialization]]
+#   - [[#tca-channel-selecting][TCA Channel Selecting]]
+#   - [[#logging][Logging]]
+#   - [[#update][Update]]
 
 * Error Messages Overview
 
