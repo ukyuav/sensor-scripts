@@ -1,7 +1,8 @@
-#+title:  I^{2}C 5 Hole Probe with a TCA9548 Multiplexer
+#+title: UAVLAB I^{2}C 5 Hole Probe with a TCA9548 Multiplexer
 #+author: Justin Tussey
-#+date: 2024-06-28
+#+date: 2024-07-03
 #+options: toc:2
+#+EXPORT_EXCLUDE_TAGS: noexport
 
 #+begin_comment
 pandoc UAVLAB-i2c-tca-documentation.org -o UAVLAB-i2c-tca-documentation.pdf --template eisvogel --listings
@@ -13,15 +14,15 @@ https://github.com/Wandmalfarbe/pandoc-latex-template <- main link
 
 #+latex: \tableofcontents
 
-# * Table of Contents :toc:
-# - [[#error-messages-overview][Error Messages Overview]]
-#   - [[#quick-reference-table][Quick Reference Table]]
-#   - [[#explanation][Explanation]]
-# - [[#code-overview][Code Overview]]
-#   - [[#global-values-and-initialization][Global Values and Initialization]]
-#   - [[#tca-channel-selecting][TCA Channel Selecting]]
-#   - [[#logging][Logging]]
-#   - [[#update][Update]]
+* Table of Contents :toc:noexport:
+- [[#error-messages-overview][Error Messages Overview]]
+  - [[#quick-reference-table][Quick Reference Table]]
+  - [[#explanation][Explanation]]
+- [[#code-overview][Code Overview]]
+  - [[#global-values-and-initialization][Global Values and Initialization]]
+  - [[#tca-channel-selecting][TCA Channel Selecting]]
+  - [[#logging][Logging]]
+  - [[#update][Update]]
 
 * Error Messages Overview
 

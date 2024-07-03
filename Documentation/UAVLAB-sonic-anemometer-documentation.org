@@ -1,7 +1,8 @@
 #+title: UAVLAB Sonic Anemometer Script Documentation
 #+author: Justin Tussey
-#+date: 2024-06-28
+#+date: 2024-07-03
 #+options: toc:2
+#+EXPORT_EXCLUDE_TAGS: noexport
 
 #+begin_comment
 pandoc UAVLAB-serial-pth-documentation.org -o UAVLAB-serial-pth-documentation.pdf --template eisvogel --listings
@@ -13,22 +14,22 @@ https://github.com/Wandmalfarbe/pandoc-latex-template <- main link
 
 #+latex: \tableofcontents
 
-# * Table of Contents :toc:
-# - [[#hardware-setup][Hardware Setup]]
-# - [[#error-messages-overview][Error Messages Overview]]
-#   - [[#quick-reference-table][Quick Reference Table]]
-#   - [[#explanation][Explanation]]
-# - [[#code-overview][Code Overview]]
-#   - [[#global-variables-and-constants][Global Variables and Constants]]
-#   - [[#serial-initialization][Serial Initialization]]
-#   - [[#update-function][Update Function]]
-#   - [[#verifying-valid-frame][Verifying Valid Frame]]
-#   - [[#is-message-useful][Is Message Useful]]
-#   - [[#verifying-checksum][Verifying Checksum]]
-#   - [[#parsing-data][Parsing Data]]
-#   - [[#logging][Logging]]
-#   - [[#important-notes][Important Notes]]
-# - [[#important-links][Important Links]]
+* Table of Contents :toc:noexport:
+- [[#hardware-setup][Hardware Setup]]
+- [[#error-messages-overview][Error Messages Overview]]
+  - [[#quick-reference-table][Quick Reference Table]]
+  - [[#explanation][Explanation]]
+- [[#code-overview][Code Overview]]
+  - [[#global-variables-and-constants][Global Variables and Constants]]
+  - [[#serial-initialization][Serial Initialization]]
+  - [[#update-function][Update Function]]
+  - [[#verifying-valid-frame][Verifying Valid Frame]]
+  - [[#is-message-useful][Is Message Useful]]
+  - [[#verifying-checksum][Verifying Checksum]]
+  - [[#parsing-data][Parsing Data]]
+  - [[#logging][Logging]]
+  - [[#important-notes][Important Notes]]
+- [[#important-links][Important Links]]
 
 * Hardware Setup
 The sonic anemometer, specifically the LCJ Capteurs CV7-OEM, uses the RS232
