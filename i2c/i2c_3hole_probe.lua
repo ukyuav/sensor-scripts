@@ -7,30 +7,20 @@ sensors with the same addresses to record pressure data from a 3 hole pitot tube
 probe onto the drone's autopilot for turbulence data collection
 
 Author: Ryan Prince | Last Updated By: Justin Tussey
-Last Updated: 2024-06-28
+Last Updated: 2024-07-03
 
 ]] --
 
--- Global Constants --
-
+--Global Constants-------------------------------------------------------------
+-- how often we wait before we rerun the main loop
 local SCHEDULE_RATE = 50 -- milliseconds
-
--- init i2c bus
--- Get interface at bus 0 (first I2C bus) and set device address to 0x0
-local I2C_BUS = i2c:get_device(0, 0)
-
--- -- make sure that get_device does not return nil
--- if (I2C_BUS == nil) then
---   gcs:send_text(0, "Cannot find I2C bus")
---   return
--- end
-
--- set the number of retries to 10
-I2C_BUS:set_retries(10)
-gcs:send_text(7, "i2c_3hole_probe Script Started!")
+-- how often we report data to the Mission Planner output
+local REPORT_RATE = uint32_t(2000) -- milliseconds
 
 -- shared address of the sensors
 local SENSOR_ADDR = 0x28
+-- 0x70 is default, to change, set or reset A0, A1, A2 on the multiplexer
+local TCA_ADDRESS = 0x70
 
 -- table of which channels on the multiplexer are being used
 local CHANNEL_NUMBERS = {
@@ -46,19 +36,27 @@ local ERROR_LIST = {
   select_fail   = "Fail tube switch"
 }
 
+-- init i2c bus
+-- Get interface at bus 0 (first I2C bus) and set device address to 0x0
+local I2C_BUS = i2c:get_device(0, 0)
 
--- 0x70 is default, to change, set or reset A0, A1, A2 on the multiplexer
-local TCA_ADDRESS = 0x70
+-- set the number of retries to 10
+I2C_BUS:set_retries(10)
+gcs:send_text(7, "i2c_5hole_probe Script Started!")
 
 
--- Global Variables --
-
+--Global Variables-------------------------------------------------------------
 -- list for the log data from the sensors
 local log_data_list = {}
 
 -- list for errors when reading channels of multiplexer
 local error_list = {}
 
+-- variable to hold the last millis when data was reported to Mission Planner
+local previous_report_time = uint32_t(0)
+
+
+--Functions--------------------------------------------------------------------
 
 -- dynamically create the message that gets reported to mission planner
 -- prevents us from having to manually change the message form every time we add
@@ -141,14 +139,23 @@ function update()
 
   log_data()
 
-  -- send_text(priority level (7 is Debug), text is formed dynamically from the function)
-  gcs:send_text(7, form_message())
+  -- send_text(priority level (7 is Debug), text is formed dynamically from the
+  -- function) Send a data output to the Mission Planner output, send only if we
+  -- have waited to at least the report rate (milliseconds)
+  if (millis() - previous_report_time >= REPORT_RATE) then
+    previous_report_time = millis()
+    gcs:send_text(7, form_message())
+  end
 
   -- reset everything for the next loop
   I2C_BUS:set_address(0x00)
   log_data_list = {}
   error_list = {}
-  return update, SCHEDULE_RATE -- reschedules the loop every 50ms (20hz)
+  return update, SCHEDULE_RATE -- reschedules the loop every 50ms (20Hz)
 end
 
 return update() -- run immediately before starting to reschedule
+
+--  Words for flyspell (Emacs' spell checker) to ignore, since it wrongly flags
+--  them as incorrect
+--  LocalWords:  millis Tussey gcs init TCA inH pitot
