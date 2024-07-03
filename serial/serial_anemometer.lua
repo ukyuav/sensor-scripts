@@ -9,11 +9,10 @@ Uses CV7-OEM Ultrasonic Wind Sensor from LCJ Capteurs
 Sends Data every 512 milliseconds, Baud rate of 4800
 
 Author: Justin Tussey
-Last Updated: 2024-06-25
+Last Updated: 2024-07-03
 ]]--
 
--- Global Constants --
-
+--Global Constants-------------------------------------------------------------
 local BAUD_RATE = 4800
 
 -- Max length of the messages from the anemometer
@@ -27,6 +26,9 @@ assert((SCHEDULE_RATE < TIME_BETWEEN_DATA), "ANEM Loop reschedule rate to long")
 -- number of how many loops we need for us to properly flag that the sensor is
 -- not sending data (// is floor division (removes decimal))
 local LOOPS_TO_FAIL = (TIME_BETWEEN_DATA // SCHEDULE_RATE) + (1)
+
+-- how often we report data to the Mission Planner output
+local REPORT_RATE = uint32_t(2000) -- milliseconds
 
 -- error type table
 -- must be 16 characters or less
@@ -61,10 +63,15 @@ local PORT = assert(serial:find_serial(0),"Could not find Scripting Serial Port"
 PORT:begin(BAUD_RATE)
 PORT:set_flow_control(0)
 
--- Global Variables --
+
+--Global Variables-------------------------------------------------------------
 -- variable to count iterations without getting message
 local loops_since_data_received = 0
 
+-- variable to hold the last millis when data was reported to Mission Planner
+local previous_report_time = uint32_t(0)
+
+--Functions--------------------------------------------------------------------
 
 -- Take in string and verify that it is a valid message frame. Specifically a
 -- message in the NMEA-0183 format, which starts with "$" and ends with <CR><LF>
@@ -219,13 +226,26 @@ function log_wind_speed(measurement_table)
     return false
   end
 
-  gcs:send_text(7, "angle: " .. tostring(measurement_table[1]) .. " speed: " .. tostring(measurement_table[2]))
-
+  -- care must be taken when selecting a name, must be less than four characters and not clash with an existing log type
+  -- format characters specify the type of variable to be logged, see AP_Logger/README.md
+  -- https://github.com/ArduPilot/ardupilot/tree/master/libraries/AP_Logger
+  -- not all format types are supported by scripting only: i, L, e, f, n, M, B, I, E, and N
+  -- Data MUST be integer|number|uint32_t_ud|string , type to match format string
+  -- lua automatically adds a timestamp in micro seconds
   logger:write('ANEM', 'angle,speed,error',  -- section name and labels
                'NNN',                        -- data type (char[16])
                measurement_table[1],             -- data for labels
                measurement_table[2],
                'Normal')
+
+  -- send_text(priority level (7 is Debug), message string) Send a data output
+  -- to the Mission Planner output, send only if we have waited to at least the
+  -- report rate (milliseconds)
+  if (millis() - previous_report_time >= REPORT_RATE) then
+    previous_report_time = millis()
+    gcs:send_text(7, "angle: " .. tostring(measurement_table[1]) .. " speed: " .. tostring(measurement_table[2]))
+  end
+
   return true
 end
 

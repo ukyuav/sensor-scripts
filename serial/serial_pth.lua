@@ -5,11 +5,10 @@ Read the data from the serial line that the PTH is connected to, then decode the
 messages from it, and log the data to the autopilots BIN file.
 
 Author: Justin Tussey
-Last Updated: 2024-06-25
+Last Updated: 2024-07-03
 ]]--
 
--- Global Constants
-
+--Global Constants-------------------------------------------------------------
 local BAUD_RATE = 9600
 
 -- Max length of the messages from the Samamet
@@ -23,6 +22,9 @@ assert((SCHEDULE_RATE < TIME_BETWEEN_DATA), "SAMA Loop reschedule rate to long")
 -- number of how many loops we need for us to properly flag that the sensor is
 -- not sending data (// is floor division (removes decimal))
 local LOOPS_TO_FAIL = (TIME_BETWEEN_DATA // SCHEDULE_RATE) + (1)
+
+-- how often we report data to the Mission Planner output
+local REPORT_RATE = uint32_t(2000) -- milliseconds
 
 -- error type table
 -- must be 16 characters or less
@@ -52,10 +54,16 @@ local PORT = assert(serial:find_serial(0),"No Scripting Serial Port")
 PORT:begin(BAUD_RATE)
 PORT:set_flow_control(0)
 
--- Global Variables
+
+--Global Variables-------------------------------------------------------------
 -- variable to count iterations without receiving message from the Samamet
 local loops_since_data_received = 0
 
+-- variable to hold the last millis when data was reported to Mission Planner
+local previous_report_time = uint32_t(0)
+
+
+--Functions--------------------------------------------------------------------
 
 -- Take in string and verify that it is a valid message frame. Specifically a
 -- message in the NMEA-0183 format, which starts with "$" and ends with <CR><LF>
@@ -177,13 +185,18 @@ function parse_data(message_string)
     return false
   end
 
--- report data to Mission Planner, not necessary all the time
-  gcs:send_text(7, "p:"  .. string.format(" %.1f  ", measurement_table[1])  ..
-                   "t1:" .. string.format(" %.1f  ", measurement_table[2])  ..
-                   "t2:" .. string.format(" %.1f  ", measurement_table[3])  ..
-                   "h:"  .. string.format(" %.1f  ", measurement_table[4])  ..
-                   "t3:" .. string.format(" %.1f", measurement_table[5])
-  )
+  -- send_text(priority level (7 is Debug), message string) Send a data output
+  -- to the Mission Planner output, send only if we have waited to at least the
+  -- report rate (milliseconds)
+  if (millis() - previous_report_time >= REPORT_RATE) then
+    previous_report_time = millis()
+    gcs:send_text(7, "p:"  .. string.format(" %.1f  ", measurement_table[1])  ..
+                     "t1:" .. string.format(" %.1f  ", measurement_table[2])  ..
+                     "t2:" .. string.format(" %.1f  ", measurement_table[3])  ..
+                     "h:"  .. string.format(" %.1f  ", measurement_table[4])  ..
+                     "t3:" .. string.format(" %.1f",   measurement_table[5])
+    )
+  end
 
   -- return whether data input data matched needed format (table with 5
   -- elements)
@@ -306,3 +319,4 @@ return update() -- run immediately before starting to reschedule
 --  Words for flyspell (Emacs' spell checker) to ignore, since it flags them as
 --  incorrect
 --  LocalWords:  Samamet Tussey UKPTH PTH NMEA SAMA gcs lua README SERIALx NNNNNN md uint ud XORing
+--  LocalWords:  millis
